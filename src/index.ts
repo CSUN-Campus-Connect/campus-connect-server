@@ -6,6 +6,7 @@ import { errorHandler } from "./middleware/errorHandler";
 import logger from "./utils/logger";
 import livestreamRoutes from "./modules/livestream/livestream.routes";
 import postsRoutes from "./modules/posts/posts.routes";
+import { setupSwaggerDocs } from "./swagger";
 
 import {
   helmetConfig, 
@@ -69,6 +70,10 @@ logger.info("Mounted livestream routes at /api/v1/livestreams");
 app.use("/api/v1/posts", postsRoutes);
 logger.info("Mounted posts routes at /api/v1/posts");
 
+
+// Setup Swagger UI
+setupSwaggerDocs(app);
+logger.info("Mounted Swagger UI at /api/docs");
 
 // Register global error handler (needs to be last)
 app.use(errorHandler);

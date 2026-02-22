@@ -5,18 +5,22 @@
 
 import { Router } from "express";
 import * as userController from "./auth.controller";
-import { validate } from "../../middleware/validateRequest";
-import { registerSchema, loginSchema, upsertProfileSchema } from "./auth.validation";
-import { authenticateToken } from "../../middleware/auth.middleware";
+import { validate } from "@/middleware/validateRequest";
+import { upsertProfileSchema } from "./auth.validation";
+import {
+  authenticateToken,
+  authenticateRefreshToken,
+} from "@/middleware/auth.middleware";
 import {
   requestPasswordResetController,
   resetPasswordController,
 } from "./password-reset.controller";
 
-import { 
-  requestPasswordResetSchema,  
-  resetPasswordSchema           
+import {
+  requestPasswordResetSchema,
+  resetPasswordSchema,
 } from "./password-reset.validation";
+import { LoginSchema, RegisterSchema } from "./auth.schemas";
 
 const router = Router();
 
@@ -25,26 +29,25 @@ if (process.env.NODE_ENV === "development") {
   router.get("/", userController.getAllUsersHandler);
 }
 
-
 // POST /api/v1/users/register - Register a new user
 router.post(
   "/register",
-  validate(registerSchema),
-  userController.registerUserHandler
+  validate(RegisterSchema),
+  userController.registerUserHandler,
 );
 
 // POST /api/v1/users/login - Login a user
+router.post("/login", validate(LoginSchema), userController.loginUserHandler);
+
+// POST /api/v1/users/refresh - Refresh access token
 router.post(
-  "/login",
-  validate(loginSchema),
-  userController.loginUserHandler
+  "/refresh",
+  authenticateRefreshToken,
+  userController.refreshAccessTokenHandler,
 );
 
-// GET /api/v1/users/public_profile - Returns user public profile
-router.get(
-  "/public_profile/:id",
-  userController.getPublicProfile
-);
+// GET /api/v1/users/:id - Returns user public profile
+router.get("/:id", userController.getPublicProfile);
 
 // GET /api/v1/users/verify?token=... - Email verification, marks user as verified if token is valid
 router.get("/verify", userController.verifyEmailHandler);
@@ -52,34 +55,31 @@ router.get("/verify", userController.verifyEmailHandler);
 // POST /api/v1/users/resend-verification
 router.post("/resend-verification", userController.resendVerificationHandler);
 
-
 // GET /api/v1/users/me - Returns the currently authenticated user's data
-router.get(
-  "/me", 
-  authenticateToken, 
-  userController.getCurrentUserHandler
-);
+router.get("/me", authenticateToken, userController.getCurrentUserHandler);
 
+// DELETE /api/v1/users/:id
+router.delete("/:id", authenticateToken, userController.deleteUserHandler);
 
 // PUT /api/v1/users/upsert-profile - Upsert profile
 router.put(
   "/upsert-profile",
   authenticateToken,
   validate(upsertProfileSchema),
-  userController.upsertProfileHandler
+  userController.upsertProfileHandler,
 );
 
 // Password reset with validation
 router.post(
   "/request-password-reset",
   validate(requestPasswordResetSchema),
-  requestPasswordResetController
+  requestPasswordResetController,
 );
 
 router.post(
   "/reset-password",
   validate(resetPasswordSchema),
-  resetPasswordController
+  resetPasswordController,
 );
 
 export default router;
