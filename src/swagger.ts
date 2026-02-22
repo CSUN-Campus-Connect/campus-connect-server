@@ -19,6 +19,7 @@ import {
   RegisterSuccessSchema,
   UpsertProfileSuccessSchema,
 } from "./modules/auth/auth.schemas";
+import logger from "./utils/logger";
 
 export const registry = new OpenAPIRegistry();
 
@@ -243,7 +244,7 @@ export const setupSwaggerDocs = (app: Express) => {
     swaggerUi.serve,
     swaggerUi.setup(swaggerSpec, swaggerOptions)
   );
-  console.log(`
-    Swagger docs available at /api/docs
+  logger.info(`
+    Swagger docs available at http://localhost:${process.env.PORT}/api/docs
     `);
 };
