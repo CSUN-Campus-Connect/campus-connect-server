@@ -1,4 +1,4 @@
-import prisma from "../../utils/prisma";
+import prisma from "@/utils/prisma";
 import { EventData, PublicEvent } from "./event.types";
 
 export const createEvent = async (eventData: EventData): Promise<PublicEvent> => {
