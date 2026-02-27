@@ -2,6 +2,10 @@ import express from "express";
 import userRoutes from "./modules/auth/auth.routes";
 import eventRoutes from "./modules/event/event.routes";
 import marketplaceRoutes from "./modules/marketplace/marketplace.routes";
+import chatRoutes from "./modules/chat/chat.routes";
+import clubsRoutes from "./modules/clubs/clubs.routes";
+import academicsRoutes from "./modules/academics/academics.routes";
+import { loadRetrievalIndex } from "./modules/chat/retrieval";
 import { errorHandler } from "./middleware/errorHandler";
 import logger from "./utils/logger";
 
@@ -55,6 +59,10 @@ app.get("/", apiRateLimiter, (_req, res) => {
   });
 });
 
+// Load chat retrieval index (no DB)
+const chatIndexLoaded = loadRetrievalIndex();
+logger.info(chatIndexLoaded ? "Chat retrieval index loaded from data/knowledge.csv" : "Chat retrieval index not found; run npm run build:knowledge");
+
 // API Routes
 app.use("/api/v1/users", userRoutes);
 logger.info("Mounted auth routes at /api/v1/users");
@@ -62,6 +70,12 @@ app.use("/api/v1/events", eventRoutes);
 logger.info("Mounted event routes at /api/v1/events");
 app.use("/api/v1/marketplace", marketplaceRoutes);
 logger.info("Mounted marketplace routes at /api/v1/marketplace");
+app.use("/api/v1/clubs", clubsRoutes);
+logger.info("Mounted clubs routes at /api/v1/clubs");
+app.use("/api/v1/academics", academicsRoutes);
+logger.info("Mounted academics routes at /api/v1/academics");
+app.use("/api/chat", chatRoutes);
+logger.info("Mounted chat routes at /api/chat");
 
 // Register global error handler (needs to be last)
 app.use(errorHandler);
