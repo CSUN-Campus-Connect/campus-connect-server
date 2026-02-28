@@ -53,6 +53,11 @@ model User {
   User_B                      User[]              @relation("UserConnections")
   marketplaceListings         MarketplaceListing[] @relation("MarketplaceListings")
   marketplaceFavorites        MarketplaceFavorite[] @relation("UserFavorites")
+
+  ConversationsCreated        Conversation[]            @relation("CreatedConversations")
+  ConversationParticipant     ConversationParticipant[]
+  Message                     Message[]
+  MessageReaction             MessageReaction[]
 }
 
 model Student {
@@ -205,6 +210,66 @@ model MarketplaceFavorite {
   @@unique([userId, listingId])
   @@index([userId])
   @@index([listingId])
+}
+
+model Conversation {
+  id           String                    @id
+  name         String?
+  isGroup      Boolean                   @default(false)
+  createdById  String
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime
+  CreatedBy    User                      @relation("CreatedConversations", fields: [createdById], references: [id], onDelete: Cascade)
+  Participants ConversationParticipant[]
+  Messages     Message[]
+
+  @@index([updatedAt(sort: Desc)])
+  @@index([createdById])
+}
+
+model ConversationParticipant {
+  id                String       @id
+  conversationId    String
+  userId            String
+  isAdmin           Boolean      @default(false)
+  lastReadMessageId String?
+  joinedAt          DateTime     @default(now())
+  Conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  User              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([conversationId])
+  @@index([userId])
+}
+
+model Message {
+  id             String            @id
+  conversationId String
+  senderId       String
+  content        String
+  isEdited       Boolean           @default(false)
+  isDeleted      Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime
+  Conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  Sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  Reactions      MessageReaction[]
+
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId])
+}
+
+model MessageReaction {
+  id        String   @id
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  Message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }
 
 enum UserType {
