@@ -7,6 +7,11 @@ import logger from "./utils/logger";
 import postsRoutes from "./modules/posts/posts.routes";
 import livestreamRoutes from "./modules/livestream/livestream.routes";
 import { setupSwaggerDocs } from "./swagger";
+import messagingRoutes from "./modules/messaging/messaging.routes";
+import { setupSocket } from "./socket"; // socket io for real time messaging
+import { createServer } from "http";    // Needed to attach socket.io to the server
+
+
 
 import {
   helmetConfig, 
@@ -16,6 +21,8 @@ import {
 } from "./middleware/security";
 
 const app = express();
+const httpServer = createServer(app); // Wraps express so socketio can share same port
+
 logger.info("Initializing CampusConnect API Server");
 
 
@@ -69,6 +76,11 @@ app.use("/api/v1/livestreams", livestreamRoutes);
 logger.info("Mounted livestream routes at /api/v1/livestreams");
 app.use("/api/v1/posts", postsRoutes);
 logger.info("Mounted posts routes at /api/v1/posts");
+app.use("/api/v1/messages", messagingRoutes);
+logger.info("Mounted messaging routes at /api/v1/messages");
+const io = setupSocket(httpServer);
+logger.info("Socket.io initialized");
+
 
 
 // Setup Swagger UI
@@ -83,8 +95,9 @@ logger.info("Registered global error handler");
 export default app;
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, async () => {
-      logger.info(`API Server is running on http://localhost:${PORT}`);
-      logger.info(`Sec Middleware: Helmet, CORS, Rate Limiting, HPP`);
+  httpServer.listen(PORT, () => {
+    logger.info(`API Server is running on http://localhost:${PORT}`);
+    logger.info(`Sec Middleware: Helmet, CORS, Rate Limiting, HPP`);
+    logger.info(`Socket.io listening on ws://localhost:${PORT}`);
   });
 }
