@@ -17,7 +17,7 @@ model Event {
   endDate     DateTime
   location    String?
   banner      String?
-  url         String?
+  url         String?  @unique
   createdById String
   createdAt   DateTime @default(now())
   createdBy   User     @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: Cascade)
