@@ -11,16 +11,16 @@ datasource db {
 model Event {
   id          String   @id @default(cuid())
   title       String
-  source      SourceType
+  source      SourceType?
   description String?
   startDate   DateTime
   endDate     DateTime
   location    String?
   banner      String?
   url         String?  @unique
-  createdById String
+  createdById String?
   createdAt   DateTime @default(now())
-  createdBy   User     @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy   User?     @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: Cascade)
 
   @@index([startDate, endDate])
 }
