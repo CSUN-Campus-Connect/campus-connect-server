@@ -30,6 +30,7 @@
     "npm": ">=9.0.0"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@prisma/client": "^6.19.0",
     "@sendgrid/mail": "^8.1.6",
     "bcrypt": "^6.0.0",
