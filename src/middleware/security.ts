@@ -14,6 +14,7 @@ export const corsConfig = cors({
       "https://csun.online",
       "https://www.csun.online",
       `http://localhost:${SERVER_PORT}`,
+      process.env.EXPO_LOCAL_URL, // Allow Expo local development URL
     ];
 
     // Allow no origin, allowed origins, or Vercel previews

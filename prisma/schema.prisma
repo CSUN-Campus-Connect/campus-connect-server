@@ -5,19 +5,22 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Event {
   id          String   @id @default(cuid())
   title       String
+  source      SourceType?
   description String?
   startDate   DateTime
   endDate     DateTime
   location    String?
   banner      String?
-  createdById String
+  url         String?  @unique
+  createdById String?
   createdAt   DateTime @default(now())
-  createdBy   User     @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy   User?     @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: Cascade)
 
   @@index([startDate, endDate])
 }
@@ -319,4 +322,10 @@ enum ListingStatus {
   sold
   inactive
   deleted
+}
+
+enum SourceType {
+  src
+  usu
+  general
 }
