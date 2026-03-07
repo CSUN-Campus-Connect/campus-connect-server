@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
+import { strongPassword } from "./password-reset.validation";
 import { UserType } from "@prisma/client";
 
 extendZodWithOpenApi(z);
@@ -202,5 +203,20 @@ export const DeleteUserSuccessSchema = z.object({
     id: "Delete User Success Message",
     description: "Message indicating successful user deletion",
     example: "Account deleted successfully",
+  }),
+});
+
+export const ChangePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: strongPassword,
+  }),
+});
+
+export const ChangePasswordSuccessSchema = z.object({
+  message: z.string().meta({
+    id: "Change Password Success Message",
+    description: "Message indicating successful password update",
+    example: "Password updated successfully",
   }),
 });
