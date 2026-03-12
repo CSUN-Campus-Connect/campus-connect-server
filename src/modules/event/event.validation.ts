@@ -12,13 +12,9 @@ export const createEventSchema = z.object({
       .max(500, { message: "Description must not exceed 500 characters" })
       .optional(),
 
-    startDate: z
-      .string({ message: "Start date is required" })
-      .datetime({ message: "Invalid start date format" }),
+    startDate: z.iso.datetime({ message: "Invalid start date format" }),
 
-    endDate: z
-      .string({ message: "End date is required" })
-      .datetime({ message: "Invalid end date format" }),
+    endDate: z.iso.datetime({ message: "Invalid end date format" }),
 
     location: z
       .string()
@@ -29,5 +25,12 @@ export const createEventSchema = z.object({
       .string()
       .url({ message: "Banner must be a valid URL" })
       .optional(),
+  }),
+});
+
+export const getEventsByDateRangeSchema = z.object({
+  query: z.object({
+    rangeStart: z.coerce.date({ message: "Invalid start date format" }),
+    rangeEnd: z.coerce.date({ message: "Invalid end date format" }),
   }),
 });

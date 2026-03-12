@@ -49,3 +49,27 @@ export const createEventSuccessSchema = z.object({
   }),
   event: createEventSchema.shape.body,
 });
+
+export const publicEventSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  startDate: z.date(),
+  endDate: z.date(),
+  location: z.string().nullable(),
+  url: z.url().nullable(),
+  banner: z.url().nullable(),
+  createdAt: z.date(),
+});
+
+export const getEventsByDateRangeSuccessSchema = z.object({
+  total: z.number().meta({
+    id: "Total",
+    description: "Total number of events",
+    example: 10,
+  }),
+  data: z.array(publicEventSchema).meta({
+    id: "Data",
+    description: "Array of events",
+  }),
+});

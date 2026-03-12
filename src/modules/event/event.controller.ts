@@ -44,3 +44,42 @@ export const createEventHandler = async (
     next(error);
   }
 };
+
+export const getEventsByDateRangeHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const rangeStart = new Date(req.query.rangeStart as string);
+    const rangeEnd = new Date(req.query.rangeEnd as string);
+
+    if (isNaN(rangeStart.getTime()) || isNaN(rangeEnd.getTime())) {
+      res.status(400).json({ 
+        error: "Validation failed",
+        details: [{
+          path: "query.rangeStart",
+          message: "Invalid date format"
+        }]
+      });
+      return;
+    }
+
+    if (rangeEnd <= rangeStart) {
+      res.status(400).json({ 
+        error: "Validation failed",
+        details: [{
+          path: "query.rangeEnd",
+          message: "End date must be after start date"
+        }]
+      });
+      return;
+    }
+
+    const events = await eventService.getEventsByDateRange(rangeStart, rangeEnd);
+    
+    res.status(200).json(events);
+  } catch (error) {
+    next(error);
+  }
+};

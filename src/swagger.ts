@@ -7,6 +7,7 @@ import {
 import {
   createEventSchema,
   createEventSuccessSchema,
+  getEventsByDateRangeSuccessSchema,
 } from "@/modules/event/event.schemas";
 import {
   CurrentUserSchema,
@@ -31,7 +32,7 @@ const bearerAuth = registry.registerComponent(
     type: "http",
     scheme: "bearer",
     bearerFormat: "JWT",
-  }
+  },
 );
 
 // Auth Endpoint Registry
@@ -243,6 +244,40 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/events",
+  summary: "Get events by date range",
+  tags: ["Events"],
+  parameters: [
+    {
+      name: "rangeStart",
+      in: "query",
+      required: true,
+      schema: { type: "string", format: "date-time" },
+      description: "Start date of the range",
+    },
+    {
+      name: "rangeEnd",
+      in: "query",
+      required: true,
+      schema: { type: "string", format: "date-time" },
+      description: "End date of the range",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Found events within date range",
+      content: {
+        "application/json": { schema: getEventsByDateRangeSuccessSchema },
+      },
+    },
+    400: { description: "Invalid date range" },
+    404: { description: "No events within date range" },
+    500: { description: "Internal server error" },
+  },
+});
+
 const generator = new OpenApiGeneratorV3(registry.definitions);
 
 const swaggerSpec = generator.generateDocument({
@@ -267,9 +302,6 @@ export const setupSwaggerDocs = (app: Express) => {
   app.use(
     "/api/docs",
     swaggerUi.serve,
-    swaggerUi.setup(swaggerSpec, swaggerOptions)
+    swaggerUi.setup(swaggerSpec, swaggerOptions),
   );
-  console.log(`
-    Swagger docs available at /api/docs
-    `);
 };

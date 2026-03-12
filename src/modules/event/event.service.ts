@@ -18,3 +18,24 @@ export const createEvent = async (eventData: EventData): Promise<PublicEvent> =>
 
   return newEvent;
 };
+
+export const getEventsByDateRange = async (rangeStart: Date, rangeEnd: Date): Promise<{total: number, data: PublicEvent[]}> => {
+  const events = await prisma.event.findMany({
+    where: {
+      startDate: {
+        lte: rangeEnd,
+      },
+      endDate: {
+        gte: rangeStart,
+      },
+    },
+    orderBy: {
+      startDate: "asc",
+    },
+  });
+
+  return {
+    total: events.length,
+    data: events,
+  };
+}
