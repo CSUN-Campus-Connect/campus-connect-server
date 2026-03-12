@@ -5,7 +5,7 @@ import { UserType } from "@prisma/client";
 extendZodWithOpenApi(z);
 
 // CSUN validator
-const csunEmail = z.string()
+const csunEmail = z
   .email({ message: "Invalid email address" })
   .refine((email) => email.toLowerCase().endsWith("@my.csun.edu"), {
     message: "Only @my.csun.edu email addresses are allowed",
