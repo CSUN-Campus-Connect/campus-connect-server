@@ -16,6 +16,6 @@ export interface PublicEvent {
   endDate: Date;
   location: string | null;
   banner: string | null;
-  createdById: string;
+  createdById: string | null;
   createdAt: Date;
 }
