@@ -85,7 +85,7 @@ export default app;
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, async () => {
       logger.info(`API Server is running on http://localhost:${PORT}`);
-      logger.info(`Swagger UI available at http://localhost:${PORT}/api/docs`);
+      logger.info(`API Docs available at http://localhost:${PORT}/api/docs`);
       logger.info(`Sec Middleware: Helmet, CORS, Rate Limiting, HPP`);
   });
 }
