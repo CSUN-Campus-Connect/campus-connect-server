@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as eventService from "./event.service";
+import logger from "@/utils/logger";
 
 export const createEventHandler = async (
   req: Request,
@@ -39,8 +40,12 @@ export const createEventHandler = async (
 
     const newEvent = await eventService.createEvent(eventData);
 
-    res.status(201).json(newEvent);
+    res.status(201).json({
+      message: "Event created successfully",
+      event: newEvent,
+    });
   } catch (error) {
+    logger.error(error, "event.create.failed");
     next(error);
   }
 };
@@ -80,6 +85,27 @@ export const getEventsByDateRangeHandler = async (
     
     res.status(200).json(events);
   } catch (error) {
+    logger.error(error, "event.get_by_date_range.failed");
+    next(error);
+  }
+};
+
+export const getEventByIdHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const event = await eventService.getEventById(req.params.id as string);
+    
+    if (!event) {
+      res.status(404).json({ message: "Event not found" });
+      return;
+    }
+
+    res.status(200).json(event);
+  } catch (error) {
+    logger.error(error, "event.get_by_id.failed");
     next(error);
   }
 };

@@ -3,7 +3,7 @@ import * as eventController from "./event.controller";
 import { authenticateToken } from "@/middleware/auth.middleware";
 import { validate } from "@/middleware/validateRequest";
 import { createEventSchema } from "./event.schemas";
-import { getEventsByDateRangeSchema } from "./event.validation";
+import { getEventsByDateRangeSchema, getEventByIdSchema } from "./event.validation";
 
 const router = Router();
 
@@ -18,6 +18,12 @@ router.get(
   "/",
   validate(getEventsByDateRangeSchema),
   eventController.getEventsByDateRangeHandler
+);
+
+router.get(
+  "/:id",
+  validate(getEventByIdSchema),
+  eventController.getEventByIdHandler
 );
 
 export default router;

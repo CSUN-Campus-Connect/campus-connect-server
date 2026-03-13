@@ -3,6 +3,18 @@ import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 
 extendZodWithOpenApi(z);
 
+export const publicEventSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  startDate: z.date(),
+  endDate: z.date(),
+  location: z.string().nullable(),
+  url: z.url().nullable(),
+  banner: z.url().nullable(),
+  createdAt: z.date(),
+});
+
 export const createEventSchema = z.object({
   body: z.object({
     title: z
@@ -42,24 +54,13 @@ export const createEventSchema = z.object({
   }),
 });
 
+
 export const createEventSuccessSchema = z.object({
   message: z.string().meta({
     id: "Event Created Message",
     example: "Event created successfully",
   }),
-  event: createEventSchema.shape.body,
-});
-
-export const publicEventSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  description: z.string().nullable(),
-  startDate: z.date(),
-  endDate: z.date(),
-  location: z.string().nullable(),
-  url: z.url().nullable(),
-  banner: z.url().nullable(),
-  createdAt: z.date(),
+  event: publicEventSchema,
 });
 
 export const getEventsByDateRangeSuccessSchema = z.object({
@@ -72,4 +73,8 @@ export const getEventsByDateRangeSuccessSchema = z.object({
     id: "Data",
     description: "Array of events",
   }),
+});
+
+export const getEventByIdSuccessSchema = z.object({
+  data: publicEventSchema,
 });

@@ -34,3 +34,9 @@ export const getEventsByDateRangeSchema = z.object({
     rangeEnd: z.coerce.date({ message: "Invalid end date format" }),
   }),
 });
+
+export const getEventByIdSchema = z.object({
+  params: z.object({
+    id: z.string({ message: "Event ID is required" }),
+  }),
+});

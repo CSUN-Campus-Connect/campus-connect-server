@@ -16,6 +16,8 @@ export const createEvent = async (eventData: EventData): Promise<PublicEvent> =>
     },
   });
 
+  if (!newEvent) throw new Error("Event not created with data: " + eventData);
+
   return newEvent;
 };
 
@@ -34,8 +36,20 @@ export const getEventsByDateRange = async (rangeStart: Date, rangeEnd: Date): Pr
     },
   });
 
+  if (!events) throw new Error("No events found with range: " + rangeStart + " to " + rangeEnd);
+
   return {
     total: events.length,
     data: events,
   };
 }
+
+export const getEventById = async (id: string): Promise<PublicEvent | null> => {
+  const event = await prisma.event.findUnique({
+    where: { id },
+  });
+
+  if (!event) throw new Error("Event not found with id: " + id);
+
+  return event;
+};
