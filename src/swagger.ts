@@ -7,6 +7,7 @@ import {
 import {
   createEventSchema,
   createEventSuccessSchema,
+  getEventByIdSuccessSchema,
   getEventsByDateRangeSuccessSchema,
 } from "@/modules/event/event.schemas";
 import {
@@ -145,7 +146,7 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
-  path: "/users/:id",
+  path: "/users/{id}",
   summary: "Get public user profile",
   tags: ["Auth"],
   parameters: [
@@ -171,7 +172,7 @@ registry.registerPath({
 
 registry.registerPath({
   method: "delete",
-  path: "/users/:id",
+  path: "/users/{id}",
   summary: "Delete user profile",
   tags: ["Auth"],
   security: [{ [bearerAuth.name]: [] }],
@@ -274,6 +275,32 @@ registry.registerPath({
     },
     400: { description: "Invalid date range" },
     404: { description: "No events within date range" },
+    500: { description: "Internal server error" },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/events/{id}",
+  summary: "Get event by ID",
+  tags: ["Events"],
+  parameters: [
+    {
+      name: "id",
+      in: "path",
+      required: true,
+      schema: { type: "string", format: "uuid" },
+      description: "Event ID",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Object with event data",
+      content: {
+        "application/json": { schema: getEventByIdSuccessSchema },
+      },
+    },
+    404: { description: "Event not found" },
     500: { description: "Internal server error" },
   },
 });
