@@ -21,6 +21,7 @@ import {
   resetPasswordSchema,
 } from "./password-reset.validation";
 import { LoginSchema, RegisterSchema } from "./auth.schemas";
+import { ChangePasswordSchema } from "./auth.schemas";
 
 const router = Router();
 
@@ -46,9 +47,6 @@ router.post(
   userController.refreshAccessTokenHandler,
 );
 
-// GET /api/v1/users/:id - Returns user public profile
-router.get("/:id", userController.getPublicProfile);
-
 // GET /api/v1/users/verify?token=... - Email verification, marks user as verified if token is valid
 router.get("/verify", userController.verifyEmailHandler);
 
@@ -57,6 +55,11 @@ router.post("/resend-verification", userController.resendVerificationHandler);
 
 // GET /api/v1/users/me - Returns the currently authenticated user's data
 router.get("/me", authenticateToken, userController.getCurrentUserHandler);
+
+router.patch("/me/password", authenticateToken, validate(ChangePasswordSchema), userController.changePasswordHandler,);
+
+// GET /api/v1/users/:id - Returns user public profile
+router.get("/:id", userController.getPublicProfile);
 
 // DELETE /api/v1/users/:id
 router.delete("/:id", authenticateToken, userController.deleteUserHandler);

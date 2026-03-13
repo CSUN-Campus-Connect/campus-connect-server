@@ -280,3 +280,31 @@ export const deleteAccount = async (id: string) => {
 
   return resp;
 };
+
+export const changePassword = async (
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user) throw new Error("User not found");
+
+  const ok = await bcrypt.compare(currentPassword, user.passwordHashed);
+  if (!ok) throw new Error("Current password is incorrect");
+
+  const sameAsOld = await bcrypt.compare(newPassword, user.passwordHashed);
+  if (sameAsOld) {
+    throw new Error("New password must be different from your current password");
+  }
+
+  const saltRounds = authConfig.salt_rounds;
+  const passwordHashed = await bcrypt.hash(newPassword, saltRounds);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHashed },
+  });
+
+  return true;
+};
