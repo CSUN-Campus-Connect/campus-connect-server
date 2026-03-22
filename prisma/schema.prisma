@@ -18,10 +18,12 @@ model Event {
   location    String?
   banner      String?
   url         String?  @unique
+  clubId      String?
+  club        Club?    @relation(fields: [clubId], references: [id], onDelete: Cascade)
   createdById String?
   createdAt   DateTime @default(now())
   createdBy   User?     @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: Cascade)
-
+  @@index([clubId])
   @@index([startDate, endDate])
 }
 
@@ -61,6 +63,18 @@ model User {
   ConversationParticipant     ConversationParticipant[]
   Message                     Message[]
   MessageReaction             MessageReaction[]
+
+  preferences      UserPreferences?
+  blockedUsers     BlockedUser[]    @relation("BlockerUser")
+  blockedBy        BlockedUser[]    @relation("BlockedUser")
+  loginHistory     LoginHistory[]
+  sessions         UserSession[]
+  bugReports       BugReport[]
+
+  clubsCreated     Club[]           @relation("CreatedClubs")
+  clubMemberships  ClubMembership[]
+  clubJoinRequests ClubJoinRequest[]
+  notifications    Notification[]
 }
 
 model Student {
@@ -108,7 +122,7 @@ model ConnectionRequest {
   status     RequestStatus @default(pending)
   createdAt  DateTime      @default(now())
   receiver   User          @relation("Received", fields: [receiverId], references: [id], onDelete: Cascade)
-  sender     User          @relation("Sent", fields: [sendId], references: [id])
+  sender     User          @relation("Sent", fields: [sendId], references: [id], onDelete: Cascade)
 
   @@index([sendId])
   @@index([receiverId])
@@ -275,6 +289,136 @@ model MessageReaction {
   @@index([messageId])
 }
 
+model UserPreferences {
+  id                         String   @id @default(uuid())
+  userId                     String   @unique
+  theme                      String   @default("light")
+  textSize                   String   @default("medium")
+  clubsNotifications         Boolean  @default(true)
+  campusEventsNotifications  Boolean  @default(true)
+  marketplaceNotifications   Boolean  @default(true)
+  academicNotifications      Boolean  @default(true)
+  followRequestNotifications Boolean  @default(true)
+  accountVisibility          String   @default("everyone")
+  whoCanMessage              String   @default("everyone")
+  allowTagging               Boolean  @default(true)
+  updatedAt                  DateTime @updatedAt
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?
+  isRead    Boolean          @default(false)
+  data      Json?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isRead])
+  @@index([createdAt(sort: Desc)])
+}
+
+model BlockedUser {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+  blocker   User     @relation("BlockerUser", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade)
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+model LoginHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  deviceLabel String
+  ipAddress   String?
+  location    String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  deviceLabel  String
+  ipAddress    String?
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model BugReport {
+  id          String   @id @default(uuid())
+  userId      String?
+  title       String
+  category    String
+  severity    String
+  description String
+  steps       String?
+  browser     String?
+  attachments String[] @default([])
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([createdAt(sort: Desc)])
+  @@index([severity])
+}
+
+model Club {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  category    ClubCategory
+  logo        String?
+  isPrivate   Boolean          @default(false)
+  createdById String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  createdBy   User             @relation("CreatedClubs", fields: [createdById], references: [id], onDelete: Cascade)
+  members     ClubMembership[]
+  joinRequests ClubJoinRequest[]
+  events      Event[]
+  @@index([category])
+  @@index([createdById])
+}
+
+model ClubMembership {
+  id       String   @id @default(cuid())
+  clubId   String
+  userId   String
+  role     ClubRole @default(member)
+  joinedAt DateTime @default(now())
+  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([clubId, userId])
+  @@index([clubId])
+  @@index([userId])
+}
+
+model ClubJoinRequest {
+  id        String         @id @default(cuid())
+  clubId    String
+  userId    String
+  status    ClubJoinStatus @default(pending)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  club      Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([clubId, userId])
+  @@index([clubId])
+  @@index([userId])
+  @@index([status])
+}
+
 enum UserType {
   student
   faculty
@@ -328,4 +472,46 @@ enum SourceType {
   src
   usu
   general
+}
+
+enum NotificationType {
+  connectionRequest
+  connectionAccepted
+  postLike
+  postComment
+  mention
+  clubInvite
+  clubJoinRequest
+  clubJoinApproved
+  clubAnnouncement
+  clubEventPosted
+  marketplaceUpdate
+  followRequest
+  eventReminder
+}
+
+enum ClubRole {
+  president
+  vicePresident
+  secretary
+  treasurer
+  officer
+  member
+}
+
+enum ClubCategory {
+  academic
+  sports
+  arts
+  technology
+  cultural
+  volunteer
+  greek
+  other
+}
+
+enum ClubJoinStatus {
+  pending
+  approved
+  rejected
 }
