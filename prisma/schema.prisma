@@ -37,6 +37,7 @@ model User {
   bio                         String?
   userType                    UserType
   createdAt                   DateTime            @default(now())
+  lastActiveAt                DateTime?
   city                        String?
   websites                    String[]            @default([])
   passwordHashed              String
@@ -236,6 +237,7 @@ model Conversation {
   createdById  String
   createdAt    DateTime                  @default(now())
   updatedAt    DateTime
+  groupPictureUrl String?
   CreatedBy    User                      @relation("CreatedConversations", fields: [createdById], references: [id], onDelete: Cascade)
   Participants ConversationParticipant[]
   Messages     Message[]
@@ -271,6 +273,7 @@ model Message {
   Conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   Sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
   Reactions      MessageReaction[]
+  Attachments    MessageAttachment[]
 
   @@index([conversationId, createdAt(sort: Desc)])
   @@index([senderId])
@@ -289,6 +292,19 @@ model MessageReaction {
   @@index([messageId])
 }
 
+model MessageAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  type      String
+  fileName  String
+  fileUrl   String
+  fileSize  Int?
+  createdAt DateTime @default(now())
+  Message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
 model UserPreferences {
   id                         String   @id @default(uuid())
   userId                     String   @unique
@@ -302,6 +318,8 @@ model UserPreferences {
   accountVisibility          String   @default("everyone")
   whoCanMessage              String   @default("everyone")
   allowTagging               Boolean  @default(true)
+  pinnedThreadIds            String[] @default([])
+  chatBackgrounds            Json?
   updatedAt                  DateTime @updatedAt
   user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
