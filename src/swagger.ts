@@ -18,6 +18,8 @@ import {
   RegisterSchema,
   RegisterSuccessSchema,
   UpsertProfileSuccessSchema,
+  ChangePasswordSchema,
+  ChangePasswordSuccessSchema
 } from "./modules/auth/auth.schemas";
 
 export const registry = new OpenAPIRegistry();
@@ -94,6 +96,30 @@ registry.registerPath({
       },
     },
     403: { description: "Refresh token is invalid or expired" },
+    500: { description: "Internal server error" },
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/users/me/password",
+  summary: "Change password for current user",
+  tags: ["Auth"],
+  security: [{ [bearerAuth.name]: [] }],
+  request: {
+    body: {
+      content: { "application/json": { schema: ChangePasswordSchema.shape.body } },
+    },
+  },
+  responses: {
+    200: {
+      description: "Password updated",
+      content: {
+        "application/json": { schema: ChangePasswordSuccessSchema },
+      },
+    },
+    400: { description: "Invalid current password or weak new password" },
+    401: { description: "Unauthorized" },
     500: { description: "Internal server error" },
   },
 });

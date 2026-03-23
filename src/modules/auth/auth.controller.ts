@@ -319,3 +319,34 @@ export const searchUsersHandler = async (
     next(error);
   }
 };
+
+export const changePasswordHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = (req.user ?? (req as any).user)?.id;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: User ID missing" });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    await userService.changePassword(userId, currentPassword, newPassword);
+
+    return res.status(200).json({ message: "Password updated successfully" });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "Current password is incorrect" ||
+        error.message === "New password must be different from your current password"
+      ) {
+        return res.status(400).json({ message: error.message });
+      }
+    }
+
+    logger.error(error, "auth.change_password.failed");
+    next(error);
+  }
+};
