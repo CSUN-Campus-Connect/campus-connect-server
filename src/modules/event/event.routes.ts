@@ -15,7 +15,7 @@ router.post(
 );
 
 router.get(
-  "/",
+  "/queryByDateRange",
   validate(getEventsByDateRangeSchema),
   eventController.getEventsByDateRangeHandler
 );
@@ -31,6 +31,13 @@ router.put(
   authenticateToken,
   validate(updateEventSchema),
   eventController.updateEventHandler
+);
+
+router.delete(
+  "/:id",
+  authenticateToken,
+  validate(getEventByIdSchema),
+  eventController.deleteEventHandler
 );
 
 export default router;

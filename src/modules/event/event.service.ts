@@ -76,3 +76,14 @@ export const updateEvent = async (id: string, eventData: EventData): Promise<Pub
 
   return updatedEvent;
 }
+
+export const deleteEvent = async (id: string, userId: string): Promise<PublicEvent> => {
+  const deletedEvent = await prisma.event.delete({
+    where: { id: id, createdById: userId },
+  });
+
+  if (!deletedEvent) throw new Error("Event not deleted with id: " + id);
+  
+  return deletedEvent;
+}
+  

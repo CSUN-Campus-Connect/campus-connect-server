@@ -7,6 +7,7 @@ import {
 import {
   createEventSchema,
   createEventSuccessSchema,
+  deleteEventSuccessSchema,
   getEventByIdSuccessSchema,
   getEventsByDateRangeSuccessSchema,
   updateEventSchema,
@@ -249,7 +250,7 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
-  path: "/events",
+  path: "/events/queryByDateRange",
   summary: "Get events by date range",
   tags: ["Events"],
   parameters: [
@@ -335,6 +336,34 @@ registry.registerPath({
       },
     },
     400: { description: "Invalid request body" },
+    401: { description: "Token is invalid or expired" },
+    404: { description: "Event not found" },
+    500: { description: "Internal server error" },
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/events/{id}",
+  summary: "Delete event by ID",
+  tags: ["Events"],
+  security: [{ [bearerAuth.name]: [] }],
+  parameters: [
+    {
+      name: "id",
+      in: "path",
+      required: true,
+      schema: { type: "string", format: "uuid" },
+      description: "Event ID",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Event deleted successfully",
+      content: {
+        "application/json": { schema: deleteEventSuccessSchema },
+      },
+    },
     401: { description: "Token is invalid or expired" },
     404: { description: "Event not found" },
     500: { description: "Internal server error" },

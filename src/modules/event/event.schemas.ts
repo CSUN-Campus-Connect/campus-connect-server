@@ -128,3 +128,11 @@ export const updateEventSuccessSchema = z.object({
   }),
   event: publicEventSchema,
 });
+
+export const deleteEventSuccessSchema = z.object({
+  message: z.string().meta({
+    id: "Event Deleted Message",
+    example: "Event deleted successfully",
+  }),
+  event: publicEventSchema,
+});

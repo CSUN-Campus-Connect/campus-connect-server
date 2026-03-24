@@ -157,3 +157,27 @@ export const updateEventHandler = async (
     next(error);
   }
 };
+
+export const deleteEventHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Authentication error" });
+      return;
+    }
+
+    const deletedEvent = await eventService.deleteEvent(req.params.id as string, req.user.id);
+
+    res.status(200).json({
+      message: "Event deleted successfully",
+      event: deletedEvent,
+    });
+    logger.info(deletedEvent, "event.delete.success");
+  } catch (error) {
+    logger.error(error, "event.delete.failed");
+    next(error);
+  }
+}
