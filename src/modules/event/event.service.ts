@@ -12,7 +12,7 @@ export const createEvent = async (eventData: EventData): Promise<PublicEvent> =>
       endDate: new Date(eventData.endDate),
       location: eventData.location,
       banner: eventData.banner,
-      createdById: eventData.createdById,
+      createdBy: { connect: { id: eventData.createdById } },
       isPublic: true,
     },
   });
