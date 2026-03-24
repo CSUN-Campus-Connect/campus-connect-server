@@ -37,8 +37,6 @@ export const getEventsByDateRange = async (rangeStart: Date, rangeEnd: Date): Pr
     },
   });
 
-  if (!events) throw new Error("No events found with range: " + rangeStart + " to " + rangeEnd);
-
   return {
     total: events.length,
     data: events,
@@ -49,8 +47,6 @@ export const getEventById = async (id: string): Promise<PublicEvent | null> => {
   const event = await prisma.event.findUnique({
     where: { id },
   });
-
-  if (!event) throw new Error("Event not found with id: " + id);
 
   return event;
 };
@@ -72,8 +68,6 @@ export const updateEvent = async (id: string, eventData: EventData): Promise<Pub
     },
   });
 
-  if (!updatedEvent) throw new Error("Event not updated with id: " + id);
-
   return updatedEvent;
 }
 
@@ -81,8 +75,6 @@ export const deleteEvent = async (id: string, userId: string): Promise<PublicEve
   const deletedEvent = await prisma.event.delete({
     where: { id: id, createdById: userId },
   });
-
-  if (!deletedEvent) throw new Error("Event not deleted with id: " + id);
   
   return deletedEvent;
 }

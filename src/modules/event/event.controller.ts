@@ -82,6 +82,11 @@ export const getEventsByDateRangeHandler = async (
     }
 
     const events = await eventService.getEventsByDateRange(rangeStart, rangeEnd);
+
+    if (!events) {
+      res.status(404).json({ message: "No events found with range: " + rangeStart + " to " + rangeEnd });
+      return;
+    }
     
     res.status(200).json(events);
   } catch (error) {
@@ -147,6 +152,11 @@ export const updateEventHandler = async (
 
     const updatedEvent = await eventService.updateEvent(req.params.id as string, eventData);
 
+    if (!updatedEvent) {
+      res.status(404).json({ message: "Event not found" });
+      return;
+    }
+
     res.status(200).json({
       message: "Event updated successfully",
       event: updatedEvent,
@@ -170,6 +180,11 @@ export const deleteEventHandler = async (
     }
 
     const deletedEvent = await eventService.deleteEvent(req.params.id as string, req.user.id);
+
+    if (!deletedEvent) {
+      res.status(404).json({ message: "Event not found" });
+      return;
+    }
 
     res.status(200).json({
       message: "Event deleted successfully",
