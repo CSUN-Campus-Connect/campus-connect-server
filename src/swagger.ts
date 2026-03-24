@@ -9,6 +9,8 @@ import {
   createEventSuccessSchema,
   getEventByIdSuccessSchema,
   getEventsByDateRangeSuccessSchema,
+  updateEventSchema,
+  updateEventSuccessSchema,
 } from "@/modules/event/event.schemas";
 import {
   CurrentUserSchema,
@@ -304,6 +306,41 @@ registry.registerPath({
     500: { description: "Internal server error" },
   },
 });
+
+registry.registerPath({
+  method: "put",
+  path: "/events/{id}",
+  summary: "Update event by ID",
+  tags: ["Events"],
+  security: [{ [bearerAuth.name]: [] }],
+  parameters: [
+    {
+      name: "id",
+      in: "path",
+      required: true,
+      schema: { type: "string", format: "uuid" },
+      description: "Event ID",
+    },
+  ],
+  request: {
+    body: {
+      content: { "application/json": { schema: updateEventSchema.shape.body } },
+    },
+  },
+  responses: {
+    200: {
+      description: "Object with updated event data",
+      content: {
+        "application/json": { schema: updateEventSuccessSchema },
+      },
+    },
+    400: { description: "Invalid request body" },
+    401: { description: "Token is invalid or expired" },
+    404: { description: "Event not found" },
+    500: { description: "Internal server error" },
+  },
+});
+
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 
