@@ -1,12 +1,10 @@
 import prisma from "@/utils/prisma";
 import { EventData, PublicEvent } from "./event.types";
 import { SourceType } from "@prisma/client";
-import { randomUUID } from "crypto";
 
 export const createEvent = async (eventData: EventData): Promise<PublicEvent> => {
   const newEvent = await prisma.event.create({
     data: {
-      id: randomUUID(),
       title: eventData.title,
       source: SourceType.general,
       description: eventData.description,
@@ -15,6 +13,7 @@ export const createEvent = async (eventData: EventData): Promise<PublicEvent> =>
       location: eventData.location,
       banner: eventData.banner,
       createdById: eventData.createdById,
+      isPublic: true,
     },
   });
 
