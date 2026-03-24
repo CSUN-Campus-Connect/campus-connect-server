@@ -1,10 +1,12 @@
 import prisma from "@/utils/prisma";
 import { EventData, PublicEvent } from "./event.types";
 import { SourceType } from "@prisma/client";
+import { randomUUID } from "crypto";
 
 export const createEvent = async (eventData: EventData): Promise<PublicEvent> => {
   const newEvent = await prisma.event.create({
     data: {
+      id: randomUUID(),
       title: eventData.title,
       source: SourceType.general,
       description: eventData.description,
@@ -53,3 +55,25 @@ export const getEventById = async (id: string): Promise<PublicEvent | null> => {
 
   return event;
 };
+
+export const updateEvent = async (id: string, eventData: EventData): Promise<PublicEvent> => {
+
+  const updatedEvent = await prisma.event.update({
+    where: { 
+      id: id,
+      createdById: eventData.createdById 
+    },
+    data: {
+      title: eventData.title,
+      description: eventData.description,
+      startDate: new Date(eventData.startDate),
+      endDate: new Date(eventData.endDate),
+      location: eventData.location,
+      banner: eventData.banner,
+    },
+  });
+
+  if (!updatedEvent) throw new Error("Event not updated with id: " + id);
+
+  return updatedEvent;
+}

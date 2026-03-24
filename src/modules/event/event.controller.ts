@@ -109,3 +109,51 @@ export const getEventByIdHandler = async (
     next(error);
   }
 };
+
+export const updateEventHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Authentication error" });
+      return;
+    }
+
+    const startDate = new Date(req.body.startDate);
+    const endDate = new Date(req.body.endDate);
+
+    if (endDate <= startDate) {
+      res.status(400).json({ 
+        error: "Validation failed",
+        details: [{
+          path: "body.endDate",
+          message: "End date must be after start date"
+        }]
+      });
+      return;
+    }
+
+    const eventData = {
+      title: req.body.title,
+      description: req.body.description,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      location: req.body.location,
+      banner: req.body.banner,
+      createdById: req.user.id,
+    };
+
+    const updatedEvent = await eventService.updateEvent(req.params.id as string, eventData);
+
+    res.status(200).json({
+      message: "Event updated successfully",
+      event: updatedEvent,
+    });
+    logger.info(updatedEvent, "event.update.success");
+  } catch (error) {
+    logger.error(error, "event.update.failed");
+    next(error);
+  }
+};

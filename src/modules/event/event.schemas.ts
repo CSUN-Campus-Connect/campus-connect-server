@@ -78,3 +78,53 @@ export const getEventsByDateRangeSuccessSchema = z.object({
 export const getEventByIdSuccessSchema = z.object({
   data: publicEventSchema,
 });
+
+export const updateEventSchema = z.object({
+  params: z.object({
+    id: z.string().meta({
+      id: "Event ID",
+      description: "ID of the event to update",
+      example: "1",
+    }),
+  }),
+  body: z.object({
+    title: z.string().optional().meta({
+      id: "Title",
+      description: "Title of the event",
+      example: "Campus Meetup",
+    }),
+    description: z.string().optional().meta({
+      id: "Description",
+      description: "Description of the event",
+      example: "An event to meet fellow students",
+    }),
+    startDate: z.iso.datetime({ message: "Invalid start date format" }).optional().meta({
+      id: "Start Date",
+      description: "Start date and time of the event",
+      example: "2024-12-31T18:00:00Z",
+    }),
+    endDate: z.iso.datetime({ message: "Invalid end date format" }).optional().meta({
+      id: "End Date",
+      description: "End date and time of the event",
+      example: "2024-12-31T20:00:00Z",
+    }),
+    location: z.string().optional().meta({
+      id: "Location",
+      description: "Location of the event",
+      example: "Jacranada Hall",
+    }),
+    banner: z.url({ message: "Banner must be a valid URL" }).optional().meta({
+      id: "Banner",
+      description: "URL of the event banner",
+      example: "https://example.com/banner.jpg",
+    }),
+  }),
+});
+
+export const updateEventSuccessSchema = z.object({
+  message: z.string().meta({
+    id: "Event Updated Message",
+    example: "Event updated successfully",
+  }),
+  event: publicEventSchema,
+});
