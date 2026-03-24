@@ -9,7 +9,7 @@ datasource db {
 }
 
 model Event {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   title       String
   source      SourceType?
   description String?
@@ -20,6 +20,8 @@ model Event {
   url         String?  @unique
   clubId      String?
   club        Club?    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  isPublic    Boolean  @default(true)
+  updatedAt   DateTime @default(now()) @updatedAt
   createdById String?
   createdAt   DateTime @default(now())
   createdBy   User?     @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: Cascade)
