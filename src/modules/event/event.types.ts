@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { publicEventSchema } from "./event.schemas";
+
 export interface EventData {
   title: string;
   description?: string;
@@ -8,14 +11,4 @@ export interface EventData {
   createdById: string;
 }
 
-export interface PublicEvent {
-  id: string;
-  title: string;
-  description: string | null;
-  startDate: Date;
-  endDate: Date;
-  location: string | null;
-  banner: string | null;
-  createdById: string;
-  createdAt: Date;
-}
+export type PublicEvent = z.infer<typeof publicEventSchema>;
