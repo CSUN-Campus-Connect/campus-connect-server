@@ -7,6 +7,7 @@ import logger from "./utils/logger";
 import postsRoutes from "./modules/posts/posts.routes";
 import livestreamRoutes from "./modules/livestream/livestream.routes";
 import { uploadRoutes } from "./modules/upload/upload.routes";
+import settingsRoutes from "./modules/settings/settings.routes";
 import { setupSwaggerDocs } from "./swagger";
 
 import {
@@ -72,6 +73,8 @@ app.use("/api/v1/posts", postsRoutes);
 logger.info("Mounted posts routes at /api/v1/posts");
 app.use("/api/v1/upload", uploadRoutes);
 logger.info("Mounted upload routes at /api/v1/upload");
+app.use("/api/v1/settings", settingsRoutes);
+logger.info("Mounted settings routes at /api/v1/settings");
 
 
 // Setup Swagger UI
