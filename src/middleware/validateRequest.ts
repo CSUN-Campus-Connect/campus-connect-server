@@ -5,11 +5,11 @@
  * If validation succeeds, proceeds to the next middleware or route handler.
  */
 import { Request, Response, NextFunction } from "express";
-import { AnyZodObject, ZodError } from "zod";
+import { ZodObject, ZodError } from "zod";
 
 // Middleware to validate request data, returns function (higher order function)
 export const validate =
-  (schema: AnyZodObject) =>
+  (schema: ZodObject<any>) =>
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       await schema.parseAsync({
@@ -22,7 +22,7 @@ export const validate =
     } catch (error) {
       if (error instanceof ZodError) {
         // Format errors properly
-        const formattedErrors = error.errors.map((err) => ({
+        const formattedErrors = (error.issues ?? []).map((err) => ({
           path: err.path.join("."),
           message: err.message,
         }));

@@ -33,7 +33,7 @@ export const getListingByIdHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const listing = await marketplaceService.getListingById(req.params.id);
+    const listing = await marketplaceService.getListingById(req.params.id as string);
     if (!listing || listing.status === 'deleted') {
       res.status(404).json({ message: "Listing not found" });
       return;
@@ -81,7 +81,7 @@ export const updateListingHandler = async (
     }
 
     // Verify user owns the listing
-    const listing = await marketplaceService.getListingById(req.params.id);
+    const listing = await marketplaceService.getListingById(req.params.id as string);
     if (!listing) {
       res.status(404).json({ message: "Listing not found" });
       return;
@@ -93,7 +93,7 @@ export const updateListingHandler = async (
     }
 
     const updateData: UpdateListingData = req.body;
-    const updated = await marketplaceService.updateListing(req.params.id, updateData);
+    const updated = await marketplaceService.updateListing(req.params.id as string, updateData);
     res.status(200).json(updated);
   } catch (error) {
     next(error);
@@ -112,7 +112,7 @@ export const deleteListingHandler = async (
       return;
     }
 
-    const listing = await marketplaceService.getListingById(req.params.id);
+    const listing = await marketplaceService.getListingById(req.params.id as string);
     if (!listing) {
       res.status(404).json({ message: "Listing not found" });
       return;
@@ -123,7 +123,7 @@ export const deleteListingHandler = async (
       return;
     }
 
-    await marketplaceService.deleteListing(req.params.id);
+    await marketplaceService.deleteListing(req.params.id as string);
     res.status(200).json({ message: "Listing deleted successfully" });
   } catch (error) {
     next(error);
@@ -137,7 +137,7 @@ export const incrementViewsHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const listing = await marketplaceService.incrementViews(req.params.id);
+    const listing = await marketplaceService.incrementViews(req.params.id as string);
     if (!listing) {
       res.status(404).json({ message: "Listing not found" });
       return;
@@ -162,7 +162,7 @@ export const toggleFavoriteHandler = async (
 
     const isFavorited = await marketplaceService.toggleFavorite(
       req.user.id,
-      req.params.id
+      req.params.id as string
     );
     res.status(200).json({ favorited: isFavorited });
   } catch (error) {

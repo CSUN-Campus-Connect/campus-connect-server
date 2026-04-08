@@ -9,7 +9,7 @@ const csunEmail = z
   });
 
 // Strong password validator
-const strongPassword = z
+export const strongPassword = z
   .string()
   .min(8, { message: "Password must be at least 8 characters" })
   .max(100, { message: "Password must not exceed 100 characters" })
