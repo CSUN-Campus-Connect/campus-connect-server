@@ -128,7 +128,7 @@ export const LoginSuccessSchema = z.object({
     description: "Message indicating successful login",
     example: "Login successful",
   }),
-  accessToken: z.jwt().meta({
+  token: z.jwt().meta({
     id: "Access Token",
     description: "JWT for authentication",
   }),

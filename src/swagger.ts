@@ -7,6 +7,11 @@ import {
 import {
   createEventSchema,
   createEventSuccessSchema,
+  deleteEventSuccessSchema,
+  getEventByIdSuccessSchema,
+  getEventsByDateRangeSuccessSchema,
+  updateEventSchema,
+  updateEventSuccessSchema,
 } from "@/modules/event/event.schemas";
 import {
   CurrentUserSchema,
@@ -31,7 +36,7 @@ const bearerAuth = registry.registerComponent(
     type: "http",
     scheme: "bearer",
     bearerFormat: "JWT",
-  }
+  },
 );
 
 // Auth Endpoint Registry
@@ -144,7 +149,7 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
-  path: "/users/:id",
+  path: "/users/{id}",
   summary: "Get public user profile",
   tags: ["Auth"],
   parameters: [
@@ -170,7 +175,7 @@ registry.registerPath({
 
 registry.registerPath({
   method: "delete",
-  path: "/users/:id",
+  path: "/users/{id}",
   summary: "Delete user profile",
   tags: ["Auth"],
   security: [{ [bearerAuth.name]: [] }],
@@ -243,6 +248,129 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/events/queryByDateRange",
+  summary: "Get events by date range",
+  tags: ["Events"],
+  parameters: [
+    {
+      name: "rangeStart",
+      in: "query",
+      required: true,
+      schema: { type: "string", format: "date-time" },
+      description: "Start date of the range",
+    },
+    {
+      name: "rangeEnd",
+      in: "query",
+      required: true,
+      schema: { type: "string", format: "date-time" },
+      description: "End date of the range",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Found events within date range",
+      content: {
+        "application/json": { schema: getEventsByDateRangeSuccessSchema },
+      },
+    },
+    400: { description: "Invalid date range" },
+    404: { description: "No events within date range" },
+    500: { description: "Internal server error" },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/events/{id}",
+  summary: "Get event by ID",
+  tags: ["Events"],
+  parameters: [
+    {
+      name: "id",
+      in: "path",
+      required: true,
+      schema: { type: "string", format: "uuid" },
+      description: "Event ID",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Object with event data",
+      content: {
+        "application/json": { schema: getEventByIdSuccessSchema },
+      },
+    },
+    404: { description: "Event not found" },
+    500: { description: "Internal server error" },
+  },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/events/{id}",
+  summary: "Update event by ID",
+  tags: ["Events"],
+  security: [{ [bearerAuth.name]: [] }],
+  parameters: [
+    {
+      name: "id",
+      in: "path",
+      required: true,
+      schema: { type: "string", format: "uuid" },
+      description: "Event ID",
+    },
+  ],
+  request: {
+    body: {
+      content: { "application/json": { schema: updateEventSchema.shape.body } },
+    },
+  },
+  responses: {
+    200: {
+      description: "Object with updated event data",
+      content: {
+        "application/json": { schema: updateEventSuccessSchema },
+      },
+    },
+    400: { description: "Invalid request body" },
+    401: { description: "Token is invalid or expired" },
+    404: { description: "Event not found" },
+    500: { description: "Internal server error" },
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/events/{id}",
+  summary: "Delete event by ID",
+  tags: ["Events"],
+  security: [{ [bearerAuth.name]: [] }],
+  parameters: [
+    {
+      name: "id",
+      in: "path",
+      required: true,
+      schema: { type: "string", format: "uuid" },
+      description: "Event ID",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Event deleted successfully",
+      content: {
+        "application/json": { schema: deleteEventSuccessSchema },
+      },
+    },
+    401: { description: "Token is invalid or expired" },
+    404: { description: "Event not found" },
+    500: { description: "Internal server error" },
+  },
+});
+
+
 const generator = new OpenApiGeneratorV3(registry.definitions);
 
 const swaggerSpec = generator.generateDocument({
@@ -267,9 +395,6 @@ export const setupSwaggerDocs = (app: Express) => {
   app.use(
     "/api/docs",
     swaggerUi.serve,
-    swaggerUi.setup(swaggerSpec, swaggerOptions)
+    swaggerUi.setup(swaggerSpec, swaggerOptions),
   );
-  console.log(`
-    Swagger docs available at /api/docs
-    `);
 };

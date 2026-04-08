@@ -47,11 +47,12 @@ export const loginUserHandler = async (
 ) => {
   try {
     const { email, password } = req.body;
-    const { token, user } = await userService.loginUser(email, password);
+    const { token, refreshToken, user } = await userService.loginUser(email, password);
     logger.info({ userId: user.id }, "auth.login.success");
     res.status(200).json({
       message: "Login successful",
       token,
+      refreshToken,
       user,
     });
   } catch (error: unknown) {

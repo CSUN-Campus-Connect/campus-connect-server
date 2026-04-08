@@ -6,12 +6,11 @@ import { errorHandler } from "./middleware/errorHandler";
 import logger from "./utils/logger";
 import postsRoutes from "./modules/posts/posts.routes";
 import livestreamRoutes from "./modules/livestream/livestream.routes";
+import { uploadRoutes } from "./modules/upload/upload.routes";
 import { setupSwaggerDocs } from "./swagger";
 import messagingRoutes from "./modules/messaging/messaging.routes";
-import { setupSocket } from "./socket"; // socket io for real time messaging
-import { createServer } from "http";    // Needed to attach socket.io to the server
-
-
+import { setupSocket } from "./socket";
+import { createServer } from "http";
 
 import {
   helmetConfig, 
@@ -21,10 +20,9 @@ import {
 } from "./middleware/security";
 
 const app = express();
-const httpServer = createServer(app); // Wraps express so socketio can share same port
+const httpServer = createServer(app);
 
 logger.info("Initializing CampusConnect API Server");
-
 
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8000;
@@ -36,29 +34,23 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true}));
 app.use(hppProtection); 
 
-// Logs all incoming requests with method and URL for debugging and monitoring
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
-  // Skip logging for health check endpoint and polling requests to reduce noise in logs
    if (req.path === "/health" || (req.path === "/" && res.statusCode === 200)) return;
 
    const duration = Date.now() - start;
    const logData = {method: req.method, path: req.path, status: res.statusCode, duration: `${duration}ms`};
   
-   // Log errors with error level, warnings with warn level, and successful requests with info level
    if (res.statusCode >= 500) {
       logger.error(logData);}
-
       else if (res.statusCode >= 400) {
       logger.warn(logData);}
-
       else {logger.info(logData);}
 });
   next();
 });
 
-// Home route
 app.get("/", apiRateLimiter, (_req, res) => {
   res.json({
     message: "Welcome to CampusConnect endpoints!",
@@ -78,10 +70,11 @@ app.use("/api/v1/posts", postsRoutes);
 logger.info("Mounted posts routes at /api/v1/posts");
 app.use("/api/v1/messages", messagingRoutes);
 logger.info("Mounted messaging routes at /api/v1/messages");
+app.use("/api/v1/upload", uploadRoutes);
+logger.info("Mounted upload routes at /api/v1/upload");
+
 const io = setupSocket(httpServer);
 logger.info("Socket.io initialized");
-
-
 
 // Setup Swagger UI
 setupSwaggerDocs(app);
@@ -97,6 +90,7 @@ export default app;
 if (process.env.NODE_ENV !== 'test') {
   httpServer.listen(PORT, () => {
     logger.info(`API Server is running on http://localhost:${PORT}`);
+    logger.info(`API Docs available at http://localhost:${PORT}/api/docs`);
     logger.info(`Sec Middleware: Helmet, CORS, Rate Limiting, HPP`);
     logger.info(`Socket.io listening on ws://localhost:${PORT}`);
   });
