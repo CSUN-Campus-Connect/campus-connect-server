@@ -47,6 +47,12 @@ router.post(
   userController.refreshAccessTokenHandler,
 );
 
+// GET /api/v1/users/search?q=... - Search users by name or email
+router.get("/search", authenticateToken, userController.searchUsersHandler);
+
+// GET /api/v1/users/:id - Returns user public profile
+router.get("/:id", userController.getPublicProfile);
+
 // GET /api/v1/users/verify?token=... - Email verification, marks user as verified if token is valid
 router.get("/verify", userController.verifyEmailHandler);
 
