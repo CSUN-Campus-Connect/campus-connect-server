@@ -16,6 +16,7 @@ const userSelect = {
   lastName: true,
   profilePicture: true,
   userType: true,
+  lastActiveAt: true,
 };
 
 const senderSelect = {
@@ -38,6 +39,7 @@ const messageInclude = {
       },
     },
   },
+  Attachments: true,
 };
 
 const conversationInclude = {
@@ -62,7 +64,7 @@ export const createConversation = async (
   creatorId: string,
   data: CreateConversationData
 ): Promise<PublicConversation> => {
-  const { isGroup, name, participantIds } = data;
+  const { isGroup, name, participantIds, groupPictureUrl } = data;
 
   if (!isGroup) {
     const existingDm = await findExistingDm(creatorId, participantIds[0]);
@@ -80,6 +82,7 @@ export const createConversation = async (
       id: crypto.randomUUID(),
       isGroup,
       name: isGroup ? name : null,
+      groupPictureUrl: isGroup ? groupPictureUrl : null,
       createdById: creatorId,
       updatedAt: now,
       Participants: {
@@ -154,18 +157,20 @@ export const getConversationById = async (
 
 export const updateConversation = async (
   conversationId: string,
-  name: string
+  name?: string,
+  groupPictureUrl?: string
 ): Promise<PublicConversation> => {
+  const data: Record<string, any> = { updatedAt: new Date() };
+  if (name !== undefined) data.name = name;
+  if (groupPictureUrl !== undefined) data.groupPictureUrl = groupPictureUrl;
+
   const updated = await prisma.conversation.update({
     where: { id: conversationId },
-    data: {
-      name,
-      updatedAt: new Date(),
-    },
+    data,
     include: conversationInclude,
   });
 
-  logger.info({ conversationId, name }, "Conversation renamed");
+  logger.info({ conversationId, name, groupPictureUrl }, "Conversation updated");
   return updated as PublicConversation;
 };
 
@@ -236,6 +241,19 @@ export const sendMessage = async (
         senderId: data.senderId,
         content: data.content,
         updatedAt: now,
+        ...(data.attachments && data.attachments.length > 0
+          ? {
+              Attachments: {
+                create: data.attachments.map((att) => ({
+                  id: crypto.randomUUID(),
+                  type: att.type,
+                  fileName: att.fileName,
+                  fileUrl: att.fileUrl,
+                  fileSize: att.fileSize ?? null,
+                })),
+              },
+            }
+          : {}),
       },
       include: messageInclude,
     }),
@@ -245,7 +263,7 @@ export const sendMessage = async (
     }),
   ]);
 
-  logger.info({ conversationId: data.conversationId, senderId: data.senderId }, "Message sent");
+  logger.info({ conversationId: data.conversationId, senderId: data.senderId, attachmentCount: data.attachments?.length ?? 0 }, "Message sent");
   return message as PublicMessage;
 };
 
@@ -427,7 +445,7 @@ export const removeReaction = async (
   }
 };
 
-// Read receitps
+// Read receipts
 
 export const markAsRead = async (
   conversationId: string,
@@ -444,5 +462,14 @@ export const markAsRead = async (
     data: {
       lastReadMessageId: messageId,
     },
+  });
+};
+
+// User presence
+
+export const updateLastActive = async (userId: string): Promise<void> => {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastActiveAt: new Date() },
   });
 };

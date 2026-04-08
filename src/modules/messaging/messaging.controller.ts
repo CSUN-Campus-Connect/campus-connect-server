@@ -101,7 +101,7 @@ export const updateConversationHandler = async (
     }
 
     if (!conversation.isGroup) {
-      res.status(400).json({ message: "Cannot rename a direct message" });
+      res.status(400).json({ message: "Cannot update a direct message" });
       return;
     }
 
@@ -111,7 +111,11 @@ export const updateConversationHandler = async (
       return;
     }
 
-    const updated = await messagingService.updateConversation(req.params.id as string, req.body.name);
+    const updated = await messagingService.updateConversation(
+      req.params.id as string,
+      req.body.name,
+      req.body.groupPictureUrl
+    );
     res.status(200).json(updated);
   } catch (error) {
     next(error);
@@ -199,6 +203,7 @@ export const sendMessageHandler = async (
       conversationId: req.params.id as string,
       senderId: req.user.id,
       content: req.body.content,
+      attachments: req.body.attachments,
     });
 
     res.status(201).json(message);

@@ -2,16 +2,26 @@ export interface CreateConversationData {
   isGroup: boolean;
   name?: string;
   participantIds: string[];
+  groupPictureUrl?: string;
 }
 
 export interface UpdateConversationData {
-  name: string;
+  name?: string;
+  groupPictureUrl?: string;
 }
 
 export interface SendMessageData {
   content: string;
   conversationId: string;
   senderId: string;
+  attachments?: AttachmentInput[];
+}
+
+export interface AttachmentInput {
+  type: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize?: number;
 }
 
 export interface EditMessageData {
@@ -41,12 +51,14 @@ export interface PublicConversation {
   name: string | null;
   isGroup: boolean;
   createdById: string;
+  groupPictureUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
   Participants: {
     id: string;
     userId: string;
     isAdmin: boolean;
+    lastReadMessageId: string | null;
     joinedAt: Date;
     User: {
       id: string;
@@ -78,6 +90,7 @@ export interface PublicMessage {
     profilePicture: string | null;
   };
   Reactions: PublicReaction[];
+  Attachments: PublicAttachment[];
 }
 
 export interface PublicReaction {
@@ -91,4 +104,14 @@ export interface PublicReaction {
     firstName: string;
     lastName: string;
   };
+}
+
+export interface PublicAttachment {
+  id: string;
+  messageId: string;
+  type: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number | null;
+  createdAt: Date;
 }

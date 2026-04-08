@@ -39,6 +39,13 @@ export const setupSocket = (httpServer: HttpServer): Server => {
     const userId = socket.userId!;
     logger.info({ userId, socketId: socket.id }, "Socket connected");
 
+    // Update lastActiveAt on connect
+    try {
+      await messagingService.updateLastActive(userId);
+    } catch (error) {
+      logger.error({ userId, error }, "Failed to update lastActiveAt on connect");
+    }
+
     // Join user to all their conversation rooms
     try {
       const conversations = await messagingService.getUserConversations(userId);
@@ -51,17 +58,21 @@ export const setupSocket = (httpServer: HttpServer): Server => {
     }
 
     // message:send — client sends a message
-    socket.on("message:send", async (data: { conversationId: string; content: string }) => {
+    socket.on("message:send", async (data: { conversationId: string; content: string; attachments?: { type: string; fileName: string; fileUrl: string; fileSize?: number }[] }) => {
       try {
         const isParticipant = await messagingService.isParticipant(data.conversationId, userId);
         if (!isParticipant) return;
 
-        if (!data.content || data.content.trim().length === 0 || data.content.length > 1000) return;
+        const hasContent = data.content && data.content.trim().length > 0;
+        const hasAttachments = data.attachments && data.attachments.length > 0;
+        if (!hasContent && !hasAttachments) return;
+        if (data.content && data.content.length > 1000) return;
 
         const message = await messagingService.sendMessage({
           conversationId: data.conversationId,
           senderId: userId,
-          content: data.content.trim(),
+          content: data.content?.trim() || "",
+          attachments: data.attachments,
         });
 
         io.to(`conversation:${data.conversationId}`).emit("message:new", message);
@@ -179,13 +190,20 @@ export const setupSocket = (httpServer: HttpServer): Server => {
       }
     });
 
-    // Handle joining new conversation rooms (when user creates/joins a conversation via REST)
+    // Handle joining new conversation rooms
     socket.on("conversation:join", (data: { conversationId: string }) => {
       socket.join(`conversation:${data.conversationId}`);
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       logger.info({ userId, socketId: socket.id }, "Socket disconnected");
+
+      // Update lastActiveAt on disconnect
+      try {
+        await messagingService.updateLastActive(userId);
+      } catch (error) {
+        logger.error({ userId, error }, "Failed to update lastActiveAt on disconnect");
+      }
     });
   });
 

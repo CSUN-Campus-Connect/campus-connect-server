@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+const attachmentSchema = z.object({
+  type: z.string().min(1).max(20),
+  fileName: z.string().min(1).max(255),
+  fileUrl: z.string().url({ message: "File URL must be a valid URL" }),
+  fileSize: z.number().int().positive().optional(),
+});
+
 export const createConversationSchema = z.object({
   body: z.object({
     isGroup: z.boolean({ message: "isGroup is required" }),
@@ -16,6 +23,8 @@ export const createConversationSchema = z.object({
       .array(z.string().uuid({ message: "Each participant ID must be a valid UUID" }))
       .min(1, { message: "At least one participant is required" })
       .max(49, { message: "Maximum 49 participants can be added (50 including you)" }),
+
+    groupPictureUrl: z.string().url().optional().nullable(),
   }).refine(
     (data) => {
       if (!data.isGroup && data.participantIds.length !== 1) {
@@ -38,11 +47,16 @@ export const createConversationSchema = z.object({
 export const updateConversationSchema = z.object({
   body: z.object({
     name: z
-      .string({ message: "Name is required" })
+      .string()
       .min(1, { message: "Group name cannot be empty" })
       .max(100, { message: "Group name must not exceed 100 characters" })
-      .trim(),
-  }),
+      .trim()
+      .optional(),
+    groupPictureUrl: z.string().url().optional().nullable(),
+  }).refine(
+    (data) => data.name !== undefined || data.groupPictureUrl !== undefined,
+    { message: "At least one field (name or groupPictureUrl) must be provided" }
+  ),
   params: z.object({
     id: z.string({ message: "Conversation ID is required" }),
   }),
@@ -58,10 +72,21 @@ export const sendMessageSchema = z.object({
   body: z.object({
     content: z
       .string({ message: "Message content is required" })
-      .min(1, { message: "Message cannot be empty" })
       .max(1000, { message: "Message must not exceed 1000 characters" })
-      .trim(),
-  }),
+      .trim()
+      .default(""),
+    attachments: z
+      .array(attachmentSchema)
+      .max(12, { message: "Maximum 12 attachments per message" })
+      .optional(),
+  }).refine(
+    (data) => {
+      const hasContent = data.content && data.content.trim().length > 0;
+      const hasAttachments = data.attachments && data.attachments.length > 0;
+      return hasContent || hasAttachments;
+    },
+    { message: "Message must have content or at least one attachment" }
+  ),
   params: z.object({
     id: z.string({ message: "Conversation ID is required" }),
   }),
