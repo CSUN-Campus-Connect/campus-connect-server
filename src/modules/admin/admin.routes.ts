@@ -8,15 +8,15 @@ const router = Router();
 // All admin routes require authentication + at least one admin role
 router.use(authenticateToken, requireAdmin);
 
-// --- Auth check ---
+// Auth Check
 // GET /api/v1/admin/me - Get current user's admin profile with permissions
 router.get("/me", adminController.getAdminProfile);
 
-// --- Role management ---
+// Role management
 // GET /api/v1/admin/roles - List all roles
 router.get("/roles", requirePermission("roles:read"), adminController.listRoles);
 
-// POST /api/v1/admin/roles - Create a new role
+// Create a new role
 router.post("/roles", requirePermission("roles:create"), adminController.createRole);
 
 // PATCH /api/v1/admin/roles/:id - Update a role
@@ -52,5 +52,24 @@ router.get("/audit-log", requirePermission("system:audit_log"), adminController.
 // --- Analytics ---
 // GET /api/v1/admin/analytics/overview - Platform overview stats
 router.get("/analytics/overview", requirePermission("analytics:view"), adminController.getAnalyticsOverview);
+
+// Clubs 
+router.get("/clubs", requirePermission("clubs:read"), adminController.getAdminClubs);
+router.delete("/clubs/:id", requirePermission("clubs:delete"), adminController.deleteAdminClub);
+
+// Marketplace 
+router.get("/marketplace", requirePermission("marketplace:read"), adminController.getAdminListings);
+router.delete("/marketplace/:id", requirePermission("marketplace:moderate"), adminController.removeAdminListing);
+
+// Events 
+router.get("/events", requirePermission("events:read"), adminController.getAdminEvents);
+router.delete("/events/:id", requirePermission("events:edit"), adminController.deleteAdminEvent);
+
+// Settings 
+router.get("/config", requirePermission("system:config"), adminController.getSystemConfigs);
+router.post("/config", requirePermission("system:config"), adminController.upsertSystemConfig);
+router.get("/announcements", requirePermission("system:announcements"), adminController.getAnnouncements);
+router.post("/announcements", requirePermission("system:announcements"), adminController.createAnnouncement);
+router.delete("/announcements/:id", requirePermission("system:announcements"), adminController.deleteAnnouncement);
 
 export default router;
