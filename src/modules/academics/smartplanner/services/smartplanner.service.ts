@@ -10,7 +10,7 @@ import type {
   RequirementGraphNode,
   RoadmapLink,
   SuggestRoadmapsResponse
-} from "./academics.types";
+} from "../smartplanner.types";
 
 /* ================================
    Sources and constants for tree build with CSUN curriculum data

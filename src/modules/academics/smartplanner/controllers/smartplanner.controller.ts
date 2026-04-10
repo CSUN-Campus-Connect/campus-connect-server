@@ -9,9 +9,9 @@ import {
   parseRoadmap,
   searchMajors,
   suggestRoadmaps
-} from "./academics.service";
-import type { ElectiveGroup } from "./academics.types";
-import { parseMajorLevel, requireInt, requireString, validatePlannerBuildBody } from "./academics.validation";
+} from "../services/smartplanner.service";
+import type { ElectiveGroup } from "../smartplanner.types";
+import { parseMajorLevel, requireInt, requireString, validatePlannerBuildBody } from "../smartplanner.validation";
 
 /* ─────────────────────────────────────────────────────────────
    Existing route handlers (unchanged)

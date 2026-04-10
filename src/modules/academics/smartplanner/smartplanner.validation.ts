@@ -1,4 +1,4 @@
-import type { MajorLevel, PlannerBuildRequest } from "./academics.types";
+import type { MajorLevel, PlannerBuildRequest } from "./smartplanner.types";
 
 export function parseMajorLevel(input: unknown): MajorLevel {
   const s = String(input ?? "undergraduate").toLowerCase();
