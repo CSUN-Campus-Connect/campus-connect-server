@@ -12,6 +12,7 @@ import messagingRoutes from "./modules/messaging/messaging.routes";
 import { setupSocket } from "./socket";
 import { createServer } from "http";
 import adminRoutes from "./modules/admin/admin.routes";
+import moderationRoutes from "./modules/moderation/moderation.routes";
 
 
 import {
@@ -76,6 +77,8 @@ app.use("/api/v1/upload", uploadRoutes);
 logger.info("Mounted upload routes at /api/v1/upload");
 app.use("/api/v1/admin", adminRoutes);
 logger.info("Mounted admin routes at /api/v1/admin");
+app.use("/api/v1/moderation", moderationRoutes);
+logger.info("Mounted moderation routes at /api/v1/moderation");
 
 const io = setupSocket(httpServer);
 logger.info("Socket.io initialized");

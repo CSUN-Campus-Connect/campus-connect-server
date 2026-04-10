@@ -552,3 +552,260 @@ export const getAnalyticsOverview = async (req: Request, res: Response): Promise
     res.status(500).json({ error: "Failed to fetch analytics" });
   }
 };
+
+export const getBugReports = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const bugs = await prisma.bugReport.findMany({
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    res.json(bugs);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch bug reports" });
+  }
+};
+
+export const getAdminClubs = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const search = (req.query.search as string) || "";
+    const skip = (page - 1) * limit;
+ 
+    const where = search
+      ? { name: { contains: search, mode: "insensitive" as const } }
+      : {};
+ 
+    const [clubs, total] = await Promise.all([
+      prisma.club.findMany({
+        where,
+        include: {
+          createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
+          _count: { select: { members: true, events: true, joinRequests: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.club.count({ where }),
+    ]);
+ 
+    res.json({
+      clubs,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch clubs" });
+  }
+};
+ 
+export const deleteAdminClub = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const club = await prisma.club.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!club) {
+      res.status(404).json({ error: "Club not found" });
+      return;
+    }
+ 
+    await prisma.club.delete({ where: { id } });
+    await logAdminAction(req, "club:deleted", `club:${id}`, { name: club.name });
+    res.json({ message: "Club deleted" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete club" });
+  }
+};
+ 
+// MARKETPLACE ADMIN
+ 
+export const getAdminListings = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const status = req.query.status as string;
+    const search = (req.query.search as string) || "";
+    const skip = (page - 1) * limit;
+ 
+    const where: any = {};
+    if (status) where.status = status;
+    if (search) where.title = { contains: search, mode: "insensitive" };
+ 
+    const [listings, total] = await Promise.all([
+      prisma.marketplaceListing.findMany({
+        where,
+        include: {
+          seller: { select: { id: true, firstName: true, lastName: true, email: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.marketplaceListing.count({ where }),
+    ]);
+ 
+    res.json({
+      listings,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch listings" });
+  }
+};
+ 
+export const removeAdminListing = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const listing = await prisma.marketplaceListing.findUnique({ where: { id }, select: { id: true, title: true } });
+    if (!listing) {
+      res.status(404).json({ error: "Listing not found" });
+      return;
+    }
+ 
+    await prisma.marketplaceListing.update({ where: { id }, data: { status: "deleted" } });
+    await logAdminAction(req, "listing:removed", `listing:${id}`, { title: listing.title });
+    res.json({ message: "Listing removed" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to remove listing" });
+  }
+};
+ 
+// EVENTS ADMIN
+ 
+export const getAdminEvents = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const search = (req.query.search as string) || "";
+    const skip = (page - 1) * limit;
+ 
+    const where = search
+      ? { title: { contains: search, mode: "insensitive" as const } }
+      : {};
+ 
+    const [events, total] = await Promise.all([
+      prisma.event.findMany({
+        where,
+        include: {
+          createdBy: { select: { id: true, firstName: true, lastName: true } },
+          club: { select: { id: true, name: true } },
+        },
+        orderBy: { startDate: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.event.count({ where }),
+    ]);
+ 
+    res.json({
+      events,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch events" });
+  }
+};
+ 
+export const deleteAdminEvent = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const event = await prisma.event.findUnique({ where: { id }, select: { id: true, title: true } });
+    if (!event) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+ 
+    await prisma.event.delete({ where: { id } });
+    await logAdminAction(req, "event:deleted", `event:${id}`, { title: event.title });
+    res.json({ message: "Event deleted" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete event" });
+  }
+};
+
+// SETTINGS / SYSTEM CONFIG
+ 
+export const getSystemConfigs = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const configs = await prisma.systemConfig.findMany({ orderBy: { key: "asc" } });
+    res.json(configs);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch configs" });
+  }
+};
+ 
+export const upsertSystemConfig = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { key, value } = req.body;
+    if (!key) {
+      res.status(400).json({ error: "key required" });
+      return;
+    }
+ 
+    const config = await prisma.systemConfig.upsert({
+      where: { key },
+      update: { value, updatedBy: req.user!.id },
+      create: { key, value, updatedBy: req.user!.id },
+    });
+ 
+    await logAdminAction(req, "config:updated", `config:${key}`, { value });
+    res.json(config);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update config" });
+  }
+};
+ 
+export const getAnnouncements = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const announcements = await prisma.announcement.findMany({
+      include: {
+        author: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(announcements);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch announcements" });
+  }
+};
+ 
+export const createAnnouncement = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { title, body, type, audience, endsAt } = req.body;
+    if (!title || !body) {
+      res.status(400).json({ error: "title and body required" });
+      return;
+    }
+ 
+    const announcement = await prisma.announcement.create({
+      data: {
+        title,
+        body,
+        type: type || "INFO",
+        audience: audience || "ALL",
+        endsAt: endsAt ? new Date(endsAt) : null,
+        authorId: req.user!.id,
+      },
+    });
+ 
+    await logAdminAction(req, "announcement:created", `announcement:${announcement.id}`, { title });
+    res.status(201).json(announcement);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create announcement" });
+  }
+};
+ 
+export const deleteAnnouncement = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    await prisma.announcement.delete({ where: { id } });
+    await logAdminAction(req, "announcement:deleted", `announcement:${id}`);
+    res.json({ message: "Announcement deleted" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete announcement" });
+  }
+};
