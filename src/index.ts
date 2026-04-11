@@ -13,6 +13,7 @@ import { setupSocket } from "./socket";
 import { createServer } from "http";
 import adminRoutes from "./modules/admin/admin.routes";
 import moderationRoutes from "./modules/moderation/moderation.routes";
+import securityRoutes from "./modules/security/security.routes";
 
 
 import {
@@ -79,6 +80,8 @@ app.use("/api/v1/admin", adminRoutes);
 logger.info("Mounted admin routes at /api/v1/admin");
 app.use("/api/v1/moderation", moderationRoutes);
 logger.info("Mounted moderation routes at /api/v1/moderation");
+app.use("/api/v1/security", securityRoutes);
+logger.info("Mounted security routes at /api/v1/security");
 
 const io = setupSocket(httpServer);
 logger.info("Socket.io initialized");
