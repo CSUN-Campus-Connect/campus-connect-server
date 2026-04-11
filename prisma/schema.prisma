@@ -85,6 +85,8 @@ model User {
   moderationActions  ModerationAction[] @relation("ModeratorActions")
   adminAuditLogs     AdminAuditLog[]
   announcements      Announcement[]     @relation("AnnouncementAuthor")
+  securityReports      SecurityReport[]   @relation("SecurityReporter")
+  securityAssignments  SecurityReport[]   @relation("SecurityAssignee")
 }
 
 model Student {
@@ -588,6 +590,111 @@ model SystemConfig {
   updatedAt DateTime @updatedAt
 }
 
+model SecurityReport {
+  id                    String                @id @default(cuid())
+  caseNumber            String                @unique
+  reporterId            String?
+  reportType            SecurityReportType
+  urgency               SecurityUrgency
+  status                SecurityStatus        @default(SUBMITTED)
+  title                 String
+  description           String
+  location              String?
+  latitude              Float?
+  longitude             Float?
+  incidentDate          DateTime
+  isAnonymous           Boolean               @default(false)
+  anonymousToken        String?               @unique
+  assignedDepartment    SecurityDepartment
+  assignedToId          String?
+  parentReportId        String?
+  reporterRelationship  ReporterRelationship  @default(VICTIM)
+  cleryGeography        CleryGeography?
+  resolvedAt            DateTime?
+  resolutionSummary     String?
+  internalNotes         String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  reporter        User?              @relation("SecurityReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  assignedTo      User?              @relation("SecurityAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  parentReport    SecurityReport?    @relation("LinkedReports", fields: [parentReportId], references: [id])
+  childReports    SecurityReport[]   @relation("LinkedReports")
+  evidence        ReportEvidence[]
+  statusHistory   ReportStatusHistory[]
+  messages        ReportMessage[]
+  involvedParties ReportInvolvedParty[]
+
+  @@index([status])
+  @@index([assignedDepartment])
+  @@index([reporterId])
+  @@index([assignedToId])
+  @@index([urgency])
+  @@index([createdAt(sort: Desc)])
+  @@index([caseNumber])
+}
+
+model ReportEvidence {
+  id             String   @id @default(cuid())
+  reportId       String
+  uploadedById   String
+  fileUrl        String
+  fileName       String
+  fileType       String
+  fileSizeBytes  Int
+  description    String?
+  isRedacted     Boolean  @default(false)
+  checksumSha256 String
+  uploadedAt     DateTime @default(now())
+
+  report     SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+model ReportStatusHistory {
+  id             String   @id @default(cuid())
+  reportId       String
+  previousStatus String
+  newStatus      String
+  changedById    String
+  note           String?
+  createdAt      DateTime @default(now())
+
+  report    SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model ReportMessage {
+  id         String   @id @default(cuid())
+  reportId   String
+  senderId   String
+  senderRole SecurityMessageRole
+  content    String
+  isInternal Boolean  @default(false)
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  report SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, createdAt])
+}
+
+model ReportInvolvedParty {
+  id              String  @id @default(cuid())
+  reportId        String
+  name            String?
+  description     String?
+  affiliation     String?
+  relationToReporter String?
+
+  report SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
 enum UserType {
   student
   faculty
@@ -762,4 +869,72 @@ enum AnnouncementTarget {
   STUDENTS
   FACULTY
   ALUMNI
+}
+
+enum SecurityReportType {
+  CRIMINAL
+  SAFETY_HAZARD
+  DISCRIMINATION
+  SEXUAL_VIOLENCE
+  MISCONDUCT
+  ACADEMIC_DISHONESTY
+  DISTURBANCE
+  SUSPICIOUS_ACTIVITY
+  ESCORT_REQUEST
+  LOST_FOUND
+  PARKING
+  ANONYMOUS_TIP
+  MENTAL_HEALTH
+}
+
+enum SecurityUrgency {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  TIME_SENSITIVE
+}
+
+enum SecurityStatus {
+  DRAFT
+  SUBMITTED
+  ACKNOWLEDGED
+  UNDER_REVIEW
+  INVESTIGATION
+  ESCALATED
+  PENDING_RESOLUTION
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+enum SecurityDepartment {
+  DPS
+  OEC
+  OSCED
+  HOUSING
+  UCS
+  PARKING
+  PHYSICAL_PLANT
+}
+
+enum ReporterRelationship {
+  VICTIM
+  WITNESS
+  BYSTANDER
+  ON_BEHALF_OF
+}
+
+enum CleryGeography {
+  ON_CAMPUS
+  ON_CAMPUS_RESIDENTIAL
+  NON_CAMPUS
+  PUBLIC_PROPERTY
+}
+
+enum SecurityMessageRole {
+  REPORTER
+  HANDLER
+  INVESTIGATOR
+  SUPERVISOR
 }
