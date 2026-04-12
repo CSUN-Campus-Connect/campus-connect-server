@@ -1,105 +1,16 @@
-// src/modules/security/security.controller.ts
 import { Request, Response } from "express";
-import prisma from "@/utils/prisma";
 import { logAdminAction } from "@/utils/audit";
-import { SecurityDepartment, SecurityUrgency } from "@prisma/client";
-import crypto from "crypto";
-
-const generateCaseNumber = (): string => {
-  const date = new Date();
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const rand = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
-  return `SR-${y}${m}${d}-${rand}`;
-};
-
-const REPORT_TYPE_ROUTING: Record<string, SecurityDepartment> = {
-  CRIMINAL: "DPS",
-  SAFETY_HAZARD: "DPS",
-  DISCRIMINATION: "OEC",
-  SEXUAL_VIOLENCE: "OEC",
-  MISCONDUCT: "OSCED",
-  ACADEMIC_DISHONESTY: "OSCED",
-  DISTURBANCE: "HOUSING",
-  SUSPICIOUS_ACTIVITY: "DPS",
-  ESCORT_REQUEST: "DPS",
-  LOST_FOUND: "PARKING",
-  PARKING: "PARKING",
-  ANONYMOUS_TIP: "DPS",
-  MENTAL_HEALTH: "UCS",
-};
-
-const URGENCY_MAP: Record<string, SecurityUrgency> = {
-  CRIMINAL: "HIGH",
-  SEXUAL_VIOLENCE: "CRITICAL",
-  SUSPICIOUS_ACTIVITY: "MEDIUM",
-  SAFETY_HAZARD: "MEDIUM",
-  DISCRIMINATION: "HIGH",
-  MISCONDUCT: "MEDIUM",
-  ACADEMIC_DISHONESTY: "MEDIUM",
-  DISTURBANCE: "LOW",
-  ESCORT_REQUEST: "TIME_SENSITIVE",
-  LOST_FOUND: "LOW",
-  PARKING: "LOW",
-  ANONYMOUS_TIP: "MEDIUM",
-  MENTAL_HEALTH: "HIGH",
-};
+import * as securityService from "./security.service";
 
 export const submitReport = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { reportType, title, description, location, latitude, longitude, incidentDate, reporterRelationship, involvedParties } = req.body;
-
+    const { reportType, title, description, incidentDate } = req.body;
     if (!reportType || !title || !description || !incidentDate) {
       res.status(400).json({ error: "reportType, title, description, and incidentDate are required" });
       return;
     }
 
-    const caseNumber = generateCaseNumber();
-    const department = REPORT_TYPE_ROUTING[reportType] || "DPS";
-    const urgency = URGENCY_MAP[reportType] || "MEDIUM";
-
-    const report = await prisma.securityReport.create({
-      data: {
-        caseNumber,
-        reporterId: req.user!.id,
-        reportType,
-        urgency,
-        title,
-        description,
-        location: location || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
-        incidentDate: new Date(incidentDate),
-        assignedDepartment: department,
-        reporterRelationship: reporterRelationship || "VICTIM",
-      },
-    });
-
-    if (involvedParties && Array.isArray(involvedParties)) {
-      for (const party of involvedParties) {
-        await prisma.reportInvolvedParty.create({
-          data: {
-            reportId: report.id,
-            name: party.name || null,
-            description: party.description || null,
-            affiliation: party.affiliation || null,
-            relationToReporter: party.relationToReporter || null,
-          },
-        });
-      }
-    }
-
-    await prisma.reportStatusHistory.create({
-      data: {
-        reportId: report.id,
-        previousStatus: "NONE",
-        newStatus: "SUBMITTED",
-        changedById: req.user!.id,
-        note: "Report submitted",
-      },
-    });
-
+    const report = await securityService.createReport(req.user!.id, req.body);
     res.status(201).json({
       id: report.id,
       caseNumber: report.caseNumber,
@@ -114,43 +25,13 @@ export const submitReport = async (req: Request, res: Response): Promise<void> =
 
 export const submitAnonymousReport = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { reportType, title, description, location, incidentDate } = req.body;
-
+    const { reportType, title, description, incidentDate } = req.body;
     if (!reportType || !title || !description || !incidentDate) {
       res.status(400).json({ error: "reportType, title, description, and incidentDate are required" });
       return;
     }
 
-    const caseNumber = generateCaseNumber();
-    const department = REPORT_TYPE_ROUTING[reportType] || "DPS";
-    const urgency = URGENCY_MAP[reportType] || "MEDIUM";
-    const anonymousToken = crypto.randomBytes(16).toString("hex");
-
-    const report = await prisma.securityReport.create({
-      data: {
-        caseNumber,
-        reportType,
-        urgency,
-        title,
-        description,
-        location: location || null,
-        incidentDate: new Date(incidentDate),
-        assignedDepartment: department,
-        isAnonymous: true,
-        anonymousToken,
-      },
-    });
-
-    await prisma.reportStatusHistory.create({
-      data: {
-        reportId: report.id,
-        previousStatus: "NONE",
-        newStatus: "SUBMITTED",
-        changedById: "anonymous",
-        note: "Anonymous report submitted",
-      },
-    });
-
+    const { report, anonymousToken } = await securityService.createAnonymousReport(req.body);
     res.status(201).json({
       caseNumber: report.caseNumber,
       trackingToken: anonymousToken,
@@ -164,40 +45,15 @@ export const submitAnonymousReport = async (req: Request, res: Response): Promis
 export const trackAnonymousReport = async (req: Request, res: Response): Promise<void> => {
   try {
     const token = req.params.token as string;
-
-    const report = await prisma.securityReport.findUnique({
-      where: { anonymousToken: token },
-      select: {
-        caseNumber: true,
-        status: true,
-        reportType: true,
-        assignedDepartment: true,
-        createdAt: true,
-        resolutionSummary: true,
-        messages: {
-          where: { isInternal: false },
-          select: { content: true, senderRole: true, createdAt: true },
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
-
+    const report = await securityService.findByAnonymousToken(token);
     if (!report) {
       res.status(404).json({ error: "Invalid tracking token" });
       return;
     }
 
-    const simplifiedStatus = ["SUBMITTED", "ACKNOWLEDGED"].includes(report.status)
-      ? "Submitted"
-      : ["UNDER_REVIEW", "INVESTIGATION", "ESCALATED", "PENDING_RESOLUTION"].includes(report.status)
-      ? "In Progress"
-      : report.status === "RESOLVED"
-      ? "Resolved"
-      : "Closed";
-
     res.json({
       caseNumber: report.caseNumber,
-      status: simplifiedStatus,
+      status: securityService.simplifyStatus(report.status),
       reportType: report.reportType,
       department: report.assignedDepartment,
       submittedAt: report.createdAt,
@@ -211,21 +67,7 @@ export const trackAnonymousReport = async (req: Request, res: Response): Promise
 
 export const getMyReports = async (req: Request, res: Response): Promise<void> => {
   try {
-    const reports = await prisma.securityReport.findMany({
-      where: { reporterId: req.user!.id },
-      select: {
-        id: true,
-        caseNumber: true,
-        title: true,
-        reportType: true,
-        status: true,
-        urgency: true,
-        assignedDepartment: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
+    const reports = await securityService.findByReporter(req.user!.id);
     res.json(reports);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch reports" });
@@ -235,38 +77,15 @@ export const getMyReports = async (req: Request, res: Response): Promise<void> =
 export const getReportDetail = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-
-    const report = await prisma.securityReport.findUnique({
-      where: { id },
-      include: {
-        messages: {
-          where: { isInternal: false },
-          orderBy: { createdAt: "asc" },
-        },
-        statusHistory: {
-          orderBy: { createdAt: "desc" },
-          take: 10,
-        },
-      },
-    });
-
+    const report = await securityService.findReportForReporter(id);
     if (!report) {
       res.status(404).json({ error: "Report not found" });
       return;
     }
-
     if (report.reporterId !== req.user!.id) {
       res.status(403).json({ error: "Not authorized to view this report" });
       return;
     }
-
-    const simplifiedStatus = ["SUBMITTED", "ACKNOWLEDGED"].includes(report.status)
-      ? "Submitted"
-      : ["UNDER_REVIEW", "INVESTIGATION", "ESCALATED", "PENDING_RESOLUTION"].includes(report.status)
-      ? "In Progress"
-      : report.status === "RESOLVED"
-      ? "Resolved"
-      : "Closed";
 
     res.json({
       id: report.id,
@@ -274,7 +93,7 @@ export const getReportDetail = async (req: Request, res: Response): Promise<void
       title: report.title,
       description: report.description,
       reportType: report.reportType,
-      status: simplifiedStatus,
+      status: securityService.simplifyStatus(report.status),
       department: report.assignedDepartment,
       location: report.location,
       incidentDate: report.incidentDate,
@@ -291,69 +110,63 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
   try {
     const id = req.params.id as string;
     const { content } = req.body;
-
     if (!content) {
       res.status(400).json({ error: "content required" });
       return;
     }
 
-    const report = await prisma.securityReport.findUnique({ where: { id }, select: { reporterId: true } });
+    const report = await securityService.findReportForReporter(id);
     if (!report || report.reporterId !== req.user!.id) {
       res.status(403).json({ error: "Not authorized" });
       return;
     }
 
-    const message = await prisma.reportMessage.create({
-      data: {
-        reportId: id,
-        senderId: req.user!.id,
-        senderRole: "REPORTER",
-        content,
-      },
-    });
-
+    const message = await securityService.createReporterMessage(id, req.user!.id, content);
     res.status(201).json(message);
   } catch (error) {
     res.status(500).json({ error: "Failed to send message" });
   }
 };
 
-// ============================================================================
+export const uploadReporterEvidence = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    if (!req.file) {
+      res.status(400).json({ error: "No file provided" });
+      return;
+    }
+
+    const report = await securityService.findReportForReporter(id);
+    if (!report || report.reporterId !== req.user!.id) {
+      res.status(403).json({ error: "Not authorized" });
+      return;
+    }
+
+    if (!securityService.ALLOWED_EVIDENCE_TYPES.includes(req.file.mimetype)) {
+      res.status(400).json({ error: "File type not allowed" });
+      return;
+    }
+
+    const evidence = await securityService.uploadEvidenceFile(id, req.user!.id, req.file, req.body.description);
+    res.status(201).json(evidence);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to upload evidence" });
+  }
+};
+
 // ADMIN ENDPOINTS
-// ============================================================================
+
 
 export const getCaseQueue = async (req: Request, res: Response): Promise<void> => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
-    const status = req.query.status as string;
-    const department = req.query.department as string;
-    const urgency = req.query.urgency as string;
-    const skip = (page - 1) * limit;
+    const { cases, total } = await securityService.getCases(
+      { status: req.query.status, department: req.query.department, urgency: req.query.urgency },
+      page, limit,
+    );
 
-    const where: any = {};
-    if (status) where.status = status;
-    if (department) where.assignedDepartment = department;
-    if (urgency) where.urgency = urgency;
-
-    const [cases, total] = await Promise.all([
-      prisma.securityReport.findMany({
-        where,
-        include: {
-          reporter: { select: { id: true, firstName: true, lastName: true, email: true } },
-          assignedTo: { select: { id: true, firstName: true, lastName: true } },
-        },
-        orderBy: [{ urgency: "asc" }, { createdAt: "desc" }],
-        skip,
-        take: limit,
-      }),
-      prisma.securityReport.count({ where }),
-    ]);
-
-    res.json({
-      cases,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    res.json({ cases, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch cases" });
   }
@@ -362,31 +175,11 @@ export const getCaseQueue = async (req: Request, res: Response): Promise<void> =
 export const getCaseDetail = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-
-    const report = await prisma.securityReport.findUnique({
-      where: { id },
-      include: {
-        reporter: { select: { id: true, firstName: true, lastName: true, email: true, userType: true } },
-        assignedTo: { select: { id: true, firstName: true, lastName: true, email: true } },
-        evidence: { orderBy: { uploadedAt: "desc" } },
-        statusHistory: {
-          orderBy: { createdAt: "desc" },
-        },
-        messages: {
-          orderBy: { createdAt: "asc" },
-        },
-        involvedParties: true,
-        childReports: {
-          select: { id: true, caseNumber: true, title: true, status: true },
-        },
-      },
-    });
-
+    const report = await securityService.getCaseById(id);
     if (!report) {
       res.status(404).json({ error: "Case not found" });
       return;
     }
-
     res.json(report);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch case" });
@@ -407,34 +200,14 @@ export const updateCaseStatus = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const report = await prisma.securityReport.findUnique({ where: { id } });
+    const report = await securityService.updateStatus(id, status, req.user!.id, note, resolutionSummary);
     if (!report) {
       res.status(404).json({ error: "Case not found" });
       return;
     }
 
-    const updateData: any = { status };
-    if (status === "RESOLVED" || status === "CLOSED") {
-      updateData.resolvedAt = new Date();
-      if (resolutionSummary) updateData.resolutionSummary = resolutionSummary;
-    }
-
-    await prisma.securityReport.update({ where: { id }, data: updateData });
-
-    await prisma.reportStatusHistory.create({
-      data: {
-        reportId: id,
-        previousStatus: report.status,
-        newStatus: status,
-        changedById: req.user!.id,
-        note: note || null,
-      },
-    });
-
     await logAdminAction(req, "security:status_updated", `case:${id}`, {
-      caseNumber: report.caseNumber,
-      from: report.status,
-      to: status,
+      caseNumber: report.caseNumber, from: report.status, to: status,
     });
 
     res.json({ message: `Case status updated to ${status}` });
@@ -447,37 +220,23 @@ export const assignCase = async (req: Request, res: Response): Promise<void> => 
   try {
     const id = req.params.id as string;
     const { assigneeId } = req.body;
-
     if (!assigneeId) {
       res.status(400).json({ error: "assigneeId required" });
       return;
     }
 
-    const [report, assignee] = await Promise.all([
-      prisma.securityReport.findUnique({ where: { id } }),
-      prisma.user.findUnique({ where: { id: assigneeId }, select: { id: true, firstName: true, lastName: true } }),
-    ]);
-
-    if (!report) {
-      res.status(404).json({ error: "Case not found" });
+    const result = await securityService.assignToUser(id, assigneeId);
+    if (!result) {
+      res.status(404).json({ error: "Case or assignee not found" });
       return;
     }
-    if (!assignee) {
-      res.status(404).json({ error: "Assignee not found" });
-      return;
-    }
-
-    await prisma.securityReport.update({
-      where: { id },
-      data: { assignedToId: assigneeId },
-    });
 
     await logAdminAction(req, "security:assigned", `case:${id}`, {
-      caseNumber: report.caseNumber,
-      assigneeName: `${assignee.firstName} ${assignee.lastName}`,
+      caseNumber: result.report.caseNumber,
+      assigneeName: `${result.assignee.firstName} ${result.assignee.lastName}`,
     });
 
-    res.json({ message: `Case assigned to ${assignee.firstName} ${assignee.lastName}` });
+    res.json({ message: `Case assigned to ${result.assignee.firstName} ${result.assignee.lastName}` });
   } catch (error) {
     res.status(500).json({ error: "Failed to assign case" });
   }
@@ -487,28 +246,18 @@ export const sendCaseMessage = async (req: Request, res: Response): Promise<void
   try {
     const id = req.params.id as string;
     const { content, isInternal } = req.body;
-
     if (!content) {
       res.status(400).json({ error: "content required" });
       return;
     }
 
-    const report = await prisma.securityReport.findUnique({ where: { id } });
-    if (!report) {
+    const caseExists = await securityService.getCaseById(id);
+    if (!caseExists) {
       res.status(404).json({ error: "Case not found" });
       return;
     }
 
-    const message = await prisma.reportMessage.create({
-      data: {
-        reportId: id,
-        senderId: req.user!.id,
-        senderRole: "HANDLER",
-        content,
-        isInternal: isInternal || false,
-      },
-    });
-
+    const message = await securityService.createHandlerMessage(id, req.user!.id, content, isInternal || false);
     res.status(201).json(message);
   } catch (error) {
     res.status(500).json({ error: "Failed to send message" });
@@ -518,12 +267,7 @@ export const sendCaseMessage = async (req: Request, res: Response): Promise<void
 export const getCaseMessages = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-
-    const messages = await prisma.reportMessage.findMany({
-      where: { reportId: id },
-      orderBy: { createdAt: "asc" },
-    });
-
+    const messages = await securityService.getMessages(id);
     res.json(messages);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch messages" });
@@ -533,24 +277,13 @@ export const getCaseMessages = async (req: Request, res: Response): Promise<void
 export const addInvolvedParty = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-    const { name, description, affiliation, relationToReporter } = req.body;
-
-    const report = await prisma.securityReport.findUnique({ where: { id } });
-    if (!report) {
+    const caseExists = await securityService.getCaseById(id);
+    if (!caseExists) {
       res.status(404).json({ error: "Case not found" });
       return;
     }
 
-    const party = await prisma.reportInvolvedParty.create({
-      data: {
-        reportId: id,
-        name: name || null,
-        description: description || null,
-        affiliation: affiliation || null,
-        relationToReporter: relationToReporter || null,
-      },
-    });
-
+    const party = await securityService.createInvolvedParty(id, req.body);
     res.status(201).json(party);
   } catch (error) {
     res.status(500).json({ error: "Failed to add involved party" });
@@ -559,22 +292,43 @@ export const addInvolvedParty = async (req: Request, res: Response): Promise<voi
 
 export const getSecurityStats = async (req: Request, res: Response): Promise<void> => {
   try {
-    const [byStatus, byDepartment, byType, byUrgency, total] = await Promise.all([
-      prisma.securityReport.groupBy({ by: ["status"], _count: true }),
-      prisma.securityReport.groupBy({ by: ["assignedDepartment"], _count: true }),
-      prisma.securityReport.groupBy({ by: ["reportType"], _count: true, orderBy: { _count: { reportType: "desc" } } }),
-      prisma.securityReport.groupBy({ by: ["urgency"], _count: true }),
-      prisma.securityReport.count(),
-    ]);
-
-    res.json({
-      total,
-      byStatus: Object.fromEntries(byStatus.map((s) => [s.status, s._count])),
-      byDepartment: Object.fromEntries(byDepartment.map((d) => [d.assignedDepartment, d._count])),
-      byType: Object.fromEntries(byType.map((t) => [t.reportType, t._count])),
-      byUrgency: Object.fromEntries(byUrgency.map((u) => [u.urgency, u._count])),
-    });
+    const stats = await securityService.getStats();
+    res.json(stats);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch stats" });
+  }
+};
+
+export const uploadEvidence = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    if (!req.file) {
+      res.status(400).json({ error: "No file provided" });
+      return;
+    }
+
+    const report = await securityService.getCaseById(id);
+    if (!report) {
+      res.status(404).json({ error: "Case not found" });
+      return;
+    }
+
+    if (!securityService.ALLOWED_EVIDENCE_TYPES.includes(req.file.mimetype)) {
+      res.status(400).json({ error: "File type not allowed. Accepted: images, video, PDF, audio" });
+      return;
+    }
+
+    const evidence = await securityService.uploadEvidenceFile(id, req.user!.id, req.file, req.body.description);
+
+    await logAdminAction(req, "security:evidence_uploaded", `case:${id}`, {
+      caseNumber: report.caseNumber,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+    });
+
+    res.status(201).json(evidence);
+  } catch (error) {
+    console.error("Evidence upload error:", error);
+    res.status(500).json({ error: "Failed to upload evidence" });
   }
 };
