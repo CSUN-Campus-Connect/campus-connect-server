@@ -217,6 +217,57 @@ export const getAdminClubs = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+export const approveClub = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const club = await prisma.club.findUnique({ where: { id }, select: { id: true, name: true, createdById: true } });
+    if (!club) { res.status(404).json({ error: "Club not found" }); return; }
+
+    await prisma.club.update({ where: { id }, data: { status: "approved" } });
+
+    await prisma.notification.create({
+      data: {
+        userId: club.createdById,
+        type: "clubAnnouncement",
+        title: "Club approved",
+        body: `Your club "${club.name}" has been approved and is now live.`,
+        data: { clubId: id, action: "approved" },
+      },
+    });
+
+    await logAdminAction(req, "club:approved", `club:${id}`, { name: club.name });
+    res.json({ message: "Club approved" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to approve club" });
+  }
+};
+
+export const rejectClub = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const { reason } = req.body;
+    const club = await prisma.club.findUnique({ where: { id }, select: { id: true, name: true, createdById: true } });
+    if (!club) { res.status(404).json({ error: "Club not found" }); return; }
+
+    await prisma.club.update({ where: { id }, data: { status: "rejected", rejectionReason: reason || null } });
+
+    await prisma.notification.create({
+      data: {
+        userId: club.createdById,
+        type: "clubAnnouncement",
+        title: "Club rejected",
+        body: reason || `Your club "${club.name}" was not approved.`,
+        data: { clubId: id, action: "rejected" },
+      },
+    });
+
+    await logAdminAction(req, "club:rejected", `club:${id}`, { name: club.name, reason });
+    res.json({ message: "Club rejected" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to reject club" });
+  }
+};
+
 export const deleteAdminClub = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
@@ -425,3 +476,4 @@ export const delistAdminListing = async (req: Request, res: Response): Promise<v
     res.status(500).json({ error: "Failed to delist listing" });
   }
 };
+

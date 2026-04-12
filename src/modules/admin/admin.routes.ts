@@ -56,6 +56,8 @@ router.get("/analytics/overview", requirePermission("analytics:view"), adminCont
 // Clubs 
 router.get("/clubs", requirePermission("clubs:read"), adminController.getAdminClubs);
 router.delete("/clubs/:id", requirePermission("clubs:delete"), adminController.deleteAdminClub);
+router.patch("/clubs/:id/approve", requirePermission("clubs:approve"), adminController.approveClub);
+router.patch("/clubs/:id/reject", requirePermission("clubs:approve"), adminController.rejectClub);
 
 // Marketplace 
 router.get("/marketplace", requirePermission("marketplace:read"), adminController.getAdminListings);
