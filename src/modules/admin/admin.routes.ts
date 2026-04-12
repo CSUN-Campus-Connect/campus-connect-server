@@ -60,10 +60,12 @@ router.delete("/clubs/:id", requirePermission("clubs:delete"), adminController.d
 // Marketplace 
 router.get("/marketplace", requirePermission("marketplace:read"), adminController.getAdminListings);
 router.delete("/marketplace/:id", requirePermission("marketplace:moderate"), adminController.removeAdminListing);
+router.patch("/marketplace/:id/delist", requirePermission("marketplace:moderate"), adminController.delistAdminListing);
 
 // Events 
 router.get("/events", requirePermission("events:read"), adminController.getAdminEvents);
 router.delete("/events/:id", requirePermission("events:edit"), adminController.deleteAdminEvent);
+router.patch("/events/:id/delist", requirePermission("events:edit"), adminController.delistAdminEvent);
 
 // Settings 
 router.get("/config", requirePermission("system:config"), adminController.getSystemConfigs);

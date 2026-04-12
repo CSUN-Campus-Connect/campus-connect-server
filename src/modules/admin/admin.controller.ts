@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { logAdminAction } from "@/utils/audit";
 import * as adminService from "./admin.service";
+import prisma from "@/utils/prisma";
 
 export const getAdminProfile = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -245,11 +246,30 @@ export const getAdminListings = async (req: Request, res: Response): Promise<voi
 export const removeAdminListing = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-    const listing = await adminService.findListing(id);
-    if (!listing) { res.status(404).json({ error: "Listing not found" }); return; }
-    await adminService.removeListing(id);
-    await logAdminAction(req, "listing:removed", `listing:${id}`, { title: listing.title });
-    res.json({ message: "Listing removed" });
+    const { reason } = req.body;
+    const listing = await prisma.marketplaceListing.findUnique({
+      where: { id },
+      select: { id: true, title: true, sellerId: true },
+    });
+    if (!listing) {
+      res.status(404).json({ error: "Listing not found" });
+      return;
+    }
+
+    await prisma.marketplaceListing.update({ where: { id }, data: { status: "deleted" } });
+
+    await prisma.notification.create({
+      data: {
+        userId: listing.sellerId,
+        type: "marketplaceUpdate",
+        title: "Listing removed",
+        body: reason || `Your listing "${listing.title}" has been removed for violating platform guidelines.`,
+        data: { listingId: id, action: "removed" },
+      },
+    });
+
+    await logAdminAction(req, "listing:removed", `listing:${id}`, { title: listing.title, reason });
+    res.json({ message: "Listing removed and seller notified" });
   } catch (error) {
     res.status(500).json({ error: "Failed to remove listing" });
   }
@@ -270,11 +290,28 @@ export const getAdminEvents = async (req: Request, res: Response): Promise<void>
 export const deleteAdminEvent = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
-    const event = await adminService.findEvent(id);
+    const { reason } = req.body;
+    const event = await prisma.event.findUnique({
+      where: { id },
+      select: { id: true, title: true, createdById: true },
+    });
     if (!event) { res.status(404).json({ error: "Event not found" }); return; }
-    await adminService.deleteEvent(id);
-    await logAdminAction(req, "event:deleted", `event:${id}`, { title: event.title });
-    res.json({ message: "Event deleted" });
+
+    if (event.createdById) {
+      await prisma.notification.create({
+        data: {
+          userId: event.createdById,
+          type: "clubAnnouncement",
+          title: "Event removed",
+          body: reason || `Your event "${event.title}" has been removed for violating platform guidelines.`,
+          data: { eventId: id, action: "removed" },
+        },
+      });
+    }
+
+    await prisma.event.delete({ where: { id } });
+    await logAdminAction(req, "event:deleted", `event:${id}`, { title: event.title, reason });
+    res.json({ message: "Event removed and creator notified" });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete event" });
   }
@@ -320,5 +357,71 @@ export const deleteAnnouncement = async (req: Request, res: Response): Promise<v
     res.json({ message: "Announcement deleted" });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete announcement" });
+  }
+};
+
+export const delistAdminEvent = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const { reason } = req.body;
+    const event = await prisma.event.findUnique({
+      where: { id },
+      select: { id: true, title: true, createdById: true },
+    });
+    if (!event) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+
+    await prisma.event.update({ where: { id }, data: { isPublic: false } });
+
+    if (event.createdById) {
+      await prisma.notification.create({
+        data: {
+          userId: event.createdById,
+          type: "clubAnnouncement",
+          title: "Event delisted",
+          body: reason || `Your event "${event.title}" has been delisted by an admin. Please review and republish.`,
+          data: { eventId: id, action: "delisted" },
+        },
+      });
+    }
+
+    await logAdminAction(req, "event:delisted", `event:${id}`, { title: event.title, reason });
+    res.json({ message: "Event delisted and creator notified" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delist event" });
+  }
+};
+
+export const delistAdminListing = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const { reason } = req.body;
+    const listing = await prisma.marketplaceListing.findUnique({
+      where: { id },
+      select: { id: true, title: true, sellerId: true },
+    });
+    if (!listing) {
+      res.status(404).json({ error: "Listing not found" });
+      return;
+    }
+
+    await prisma.marketplaceListing.update({ where: { id }, data: { status: "inactive" } });
+
+    await prisma.notification.create({
+      data: {
+        userId: listing.sellerId,
+        type: "marketplaceUpdate",
+        title: "Listing delisted",
+        body: reason || `Your listing "${listing.title}" has been delisted by an admin. Please review and relist.`,
+        data: { listingId: id, action: "delisted" },
+      },
+    });
+
+    await logAdminAction(req, "listing:delisted", `listing:${id}`, { title: listing.title, reason });
+    res.json({ message: "Listing delisted and seller notified" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delist listing" });
   }
 };
