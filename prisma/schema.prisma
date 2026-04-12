@@ -73,6 +73,7 @@ model User {
   loginHistory     LoginHistory[]
   sessions         UserSession[]
   bugReports       BugReport[]
+  bugAssignments   BugReport[]     @relation("BugAssignee")
 
   clubsCreated     Club[]           @relation("CreatedClubs")
   clubMemberships  ClubMembership[]
@@ -395,6 +396,9 @@ model BugReport {
   description String
   steps       String?
   browser     String?
+  reportStatus BugReportStatus @default(open)
+  assignedToId    String?
+  assignedTo      User?           @relation("BugAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   attachments String[] @default([])
   createdAt   DateTime @default(now())
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -409,6 +413,8 @@ model Club {
   category    ClubCategory
   logo        String?
   isPrivate   Boolean          @default(false)
+  status      ClubStatus       @default(pending)
+  rejectionReason String?
   createdById String
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -937,4 +943,17 @@ enum SecurityMessageRole {
   HANDLER
   INVESTIGATOR
   SUPERVISOR
+}
+
+enum ClubStatus {
+  pending
+  approved
+  rejected
+}
+
+enum BugReportStatus {
+  open
+  in_progress
+  resolved
+  closed
 }
