@@ -76,4 +76,8 @@ router.get("/announcements", requirePermission("system:announcements"), adminCon
 router.post("/announcements", requirePermission("system:announcements"), adminController.createAnnouncement);
 router.delete("/announcements/:id", requirePermission("system:announcements"), adminController.deleteAnnouncement);
 
+// Bug Reports
+router.get("/bugs", requirePermission("bugs:read"), adminController.getBugReports);
+router.patch("/bugs/:id", requirePermission("bugs:manage"), adminController.updateBugReport);
+
 export default router;

@@ -198,10 +198,45 @@ export const getAnalyticsOverview = async (req: Request, res: Response): Promise
 
 export const getBugReports = async (req: Request, res: Response): Promise<void> => {
   try {
-    const bugs = await adminService.getBugs();
+    const bugs = await prisma.bugReport.findMany({
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        assignedTo: { select: { id: true, firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
     res.json(bugs);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch bug reports" });
+  }
+};
+
+export const updateBugReport = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = req.params.id as string;
+    const { reportStatus, assignedToId } = req.body;
+
+    const bug = await prisma.bugReport.findUnique({ where: { id } });
+    if (!bug) { res.status(404).json({ error: "Bug report not found" }); return; }
+
+    const updateData: any = {};
+    if (reportStatus) updateData.reportStatus = reportStatus;
+    if (assignedToId !== undefined) updateData.assignedToId = assignedToId || null;
+
+    const updated = await prisma.bugReport.update({
+      where: { id },
+      data: updateData,
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        assignedTo: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+
+    await logAdminAction(req, "bug:updated", `bug:${id}`, { reportStatus, assignedToId });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update bug report" });
   }
 };
 
