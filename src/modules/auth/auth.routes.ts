@@ -58,12 +58,6 @@ router.get("/me", authenticateToken, userController.getCurrentUserHandler);
 
 router.patch("/me/password", authenticateToken, validate(ChangePasswordSchema), userController.changePasswordHandler,);
 
-// GET /api/v1/users/:id - Returns user public profile
-router.get("/:id", userController.getPublicProfile);
-
-// DELETE /api/v1/users/:id
-router.delete("/:id", authenticateToken, userController.deleteUserHandler);
-
 // PUT /api/v1/users/upsert-profile - Upsert profile
 router.put(
   "/upsert-profile",
@@ -85,4 +79,21 @@ router.post(
   resetPasswordController,
 );
 
+// POST /api/v1/users/logout - Logout user
+router.post("/logout", authenticateToken, userController.logoutHandler);
+
+// GET /api/v1/users/sessions - Get active sessions for the authenticated user
+router.get("/sessions", authenticateToken, userController.getSessionsHandler);
+
+// GET /api/v1/users/login-history - Get login history for the authenticated user
+router.get("/login-history", authenticateToken, userController.getLoginHistoryHandler);
+
+// POST /api/v1/users/sessions/revoke - Revoke a specific session by session ID
+router.post("/sessions/revoke-all", authenticateToken, userController.revokeOtherSessionsHandler);
+
+// GET /api/v1/users/:id - Returns user public profile
+router.get("/:id", userController.getPublicProfile);
+
+// DELETE /api/v1/users/:id
+router.delete("/me", authenticateToken, userController.deleteUserHandler);
 export default router;

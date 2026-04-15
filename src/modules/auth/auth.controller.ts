@@ -4,7 +4,9 @@
  */
 import { Request, Response, NextFunction } from "express";
 import * as userService from "./auth.service";
+import jwt from "jsonwebtoken";
 import logger from "@/utils/logger";
+import { parseUserAgent, getLocationFromIp } from "./auth.utils";
 
 // Get all users
 export const getAllUsersHandler = async (
@@ -47,12 +49,35 @@ export const loginUserHandler = async (
 ) => {
   try {
     const { email, password } = req.body;
-    const { token, refreshToken, user } = await userService.loginUser(email, password);
+    const { refreshToken, user } = await userService.loginUser(email, password);
+    const deviceLabel = parseUserAgent(req.headers["user-agent"] || "");
+    const rawIp = req.ip || null;
+    const cleanIp = rawIp?.replace("::ffff:", "") ?? null;
+    const location = cleanIp ? await getLocationFromIp(cleanIp) : null;
+
+    await userService.recordLoginHistory(
+      user.id,
+      deviceLabel,
+      cleanIp,
+      location,
+    );
+    const sessionId = await userService.createUserSession(
+      user.id,
+      deviceLabel,
+      cleanIp,
+    );
+    const tokenWithSession = userService.generateAccessTokenWithSession(
+      user.id,
+      user.email,
+      user.userType,
+      sessionId,
+    );
     logger.info({ userId: user.id }, "auth.login.success");
     res.status(200).json({
       message: "Login successful",
-      token,
+      token: tokenWithSession,
       refreshToken,
+      sessionId,
       user,
     });
   } catch (error: unknown) {
@@ -271,7 +296,7 @@ export const resendVerificationHandler = async (
   }
 };
 
-// Deletes user account
+// Deletes user account, requires authentication and current password
 export const deleteUserHandler = async (
   req: Request,
   res: Response,
@@ -282,14 +307,21 @@ export const deleteUserHandler = async (
     if (!id)
       return res.status(401).json({ message: "Unauthorized: User ID missing" });
 
-    const resp = await userService.deleteAccount(id);
+    const { password } = req.body;
+    if (!password)
+      return res.status(400).json({ message: "Password is required to delete your account" });
+
+    const resp = await userService.deleteAccount(id, password);
 
     if (!resp) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.status(200).json({ message: "Account deleted successfully" });
+    return res.status(200).json({ message: "Account deleted successfully" });
   } catch (error) {
+    if (error instanceof Error && error.message === "Incorrect password") {
+      return res.status(401).json({ message: "Incorrect password" });
+    }
     next(error);
   }
 };
@@ -321,6 +353,74 @@ export const changePasswordHandler = async (
     }
 
     logger.error(error, "auth.change_password.failed");
+    next(error);
+  }
+};
+
+// Logs user out by deleting their session, requires session ID and authentication
+export const logoutHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ message: "Session ID is required" });
+    }
+
+    const token = req.headers["authorization"]?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+    const decoded = jwt.decode(token) as unknown as { id: string };
+
+    await userService.logoutUser(sessionId, decoded.id);
+    logger.info("auth.logout.success");
+    return res.status(200).json({ message: "Logged out successfully" });
+  } catch (error) {
+    logger.error(error, "auth.logout.failed");
+    next(error);
+  }
+};
+
+// Returns active sessions and current session ID for the user
+export const getSessionsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user?.id;
+    const currentSessionId = (req as any).user?.sessionId; 
+    const sessions = await userService.getUserSessions(userId);
+    return res.status(200).json({ sessions, currentSessionId });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Returns the 20 most recent login history entries for the user
+export const getLoginHistoryHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user?.id;
+    const history = await userService.getLoginHistory(userId);
+    return res.status(200).json({ history });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Signs the user out of all other devices by revoking sessions (execpt current session)
+export const revokeOtherSessionsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { currentSessionId } = req.body;
+
+    if (!currentSessionId) {
+      return res.status(400).json({ message: "Current session ID is required" });
+    }
+
+    await userService.revokeOtherSessions(userId, currentSessionId);
+    return res.status(200).json({ message: "Other sessions revoked" });
+  } catch (error) {
     next(error);
   }
 };

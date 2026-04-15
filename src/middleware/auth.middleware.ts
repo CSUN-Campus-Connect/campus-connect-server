@@ -10,6 +10,7 @@ export interface JWTPayload {
   id: string;
   email: string;
   userType: string;
+  sessionId?: string;
 }
 
 const getUserWithPayload = async (
@@ -65,8 +66,21 @@ export const authenticateToken = async (
       return;
     }
 
-    // Attach user to request
-    req.user = user;
+    if (decoded.sessionId) {
+      const session = await prisma.userSession.findUnique({
+        where: { id: decoded.sessionId },
+      });
+
+      if (!session) {
+        res.status(401).json({
+          error: "Authentication failed",
+          message: "Session has been invalidated",
+        });
+        return;
+      }
+    }
+
+    (req as any).user = { ...user, sessionId: decoded.sessionId }; // ← change this line
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
