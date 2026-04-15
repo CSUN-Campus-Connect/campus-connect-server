@@ -26,6 +26,10 @@ import {
   ChangePasswordSchema,
   ChangePasswordSuccessSchema
 } from "./modules/auth/auth.schemas";
+import {
+  getSundialByDateRangeSuccessSchema,
+  getAllSundialSuccessSchema,
+} from "@/modules/sundial/sundial.schemas";
 
 export const registry = new OpenAPIRegistry();
 
@@ -370,6 +374,62 @@ registry.registerPath({
   },
 });
 
+// Sundial News Endpoint Registry
+registry.registerPath({
+  method: "get",
+  path: "/sundial/queryByDateRange",
+  summary: "Get sundial news by date range",
+  tags: ["Sundial News"],
+  parameters: [
+    {
+      name: "rangeStart",
+      in: "query",
+      required: true,
+      schema: { type: "string", format: "date" },
+      description: "Start date of the range (e.g. 2026-04-01)",
+    },
+    {
+      name: "rangeEnd",
+      in: "query",
+      required: true,
+      schema: { type: "string", format: "date" },
+      description: "End date of the range (e.g. 2026-04-14)",
+    },
+    {
+      name: "category",
+      in: "query",
+      required: false,
+      schema: { type: "string", enum: ["news", "sports", "culture", "multimedia"] },
+      description: "Optional category filter",
+    },
+  ],
+  responses: {
+    200: {
+      description: "Sundial news articles within date range",
+      content: {
+        "application/json": { schema: getSundialByDateRangeSuccessSchema },
+      },
+    },
+    400: { description: "Invalid date range or category" },
+    500: { description: "Internal server error" },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/sundial",
+  summary: "Get all sundial news articles",
+  tags: ["Sundial News"],
+  responses: {
+    200: {
+      description: "All sundial news articles",
+      content: {
+        "application/json": { schema: getAllSundialSuccessSchema },
+      },
+    },
+    500: { description: "Internal server error" },
+  },
+});
 
 const generator = new OpenApiGeneratorV3(registry.definitions);
 
