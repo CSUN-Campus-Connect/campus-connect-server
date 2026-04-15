@@ -276,6 +276,41 @@ export const deleteAccount = async (id: string, password: string) => {
   return prisma.user.delete({ where: { id } });
 };
 
+// Seaerch Users by name or email (excludes self)
+export const searchUsers = async (q: string, excludeId: string): Promise<PublicUser[]> => {
+  const users = await prisma.user.findMany({
+    where: {
+      AND: [
+        { id: { not: excludeId } },
+        { isVerified: true },
+        {
+          OR: [
+            { firstName: { contains: q, mode: "insensitive" } },
+            { lastName: { contains: q, mode: "insensitive" } },
+            { email: { contains: q, mode: "insensitive" } },
+          ],
+        },
+      ],
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      profilePicture: true,
+      bio: true,
+      userType: true,
+      city: true,
+      websites: true,
+      isVerified: true,
+      createdAt: true,
+    },
+    take: 20,
+  });
+
+  return users as PublicUser[];
+};
+
 export const changePassword = async (
   userId: string,
   currentPassword: string,

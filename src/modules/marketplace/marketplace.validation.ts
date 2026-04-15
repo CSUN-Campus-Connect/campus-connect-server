@@ -87,10 +87,18 @@ export const createListingSchema = z.object({
       .nullable(),
 
     images: z
-      .array(z.string().url({ message: "Each image must be a valid URL" }))
+      .array(
+        z.string().refine(
+          (s) => {
+            if (s.startsWith('data:image/')) return true;
+            try { new URL(s); return true; } catch { return false; }
+          },
+          { message: 'Each image must be a valid URL or base64 data URL' }
+        )
+      )
       .default([])
-      .refine((arr) => arr.length <= 10, {
-        message: "Maximum 10 images allowed",
+      .refine((arr) => arr.length <= 8, {
+        message: "Maximum 8 images allowed",
       }),
 
     condition: conditionSchema,
@@ -142,9 +150,17 @@ export const updateListingSchema = z.object({
       .nullable(),
 
     images: z
-      .array(z.string().url({ message: "Each image must be a valid URL" }))
-      .refine((arr) => arr.length <= 10, {
-        message: "Maximum 10 images allowed",
+      .array(
+        z.string().refine(
+          (s) => {
+            if (s.startsWith('data:image/')) return true;
+            try { new URL(s); return true; } catch { return false; }
+          },
+          { message: 'Each image must be a valid URL or base64 data URL' }
+        )
+      )
+      .refine((arr) => arr.length <= 8, {
+        message: "Maximum 8 images allowed",
       })
       .optional(),
 

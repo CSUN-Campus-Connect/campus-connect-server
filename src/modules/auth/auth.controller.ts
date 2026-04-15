@@ -326,6 +326,33 @@ export const deleteUserHandler = async (
   }
 };
 
+// Search users by name or email
+export const searchUsersHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const q = (req.query.q as string)?.trim() ?? "";
+    const requestingUserId = (req as any).user?.id;
+
+    if (!requestingUserId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!q || q.length < 2) {
+      return res.status(200).json([]);
+    }
+
+    const users = await userService.searchUsers(q, requestingUserId);
+    logger.info({ q, resultCount: users.length }, "user.search.success");
+    res.status(200).json(users);
+  } catch (error) {
+    logger.error(error, "user.search.failed");
+    next(error);
+  }
+};
+
 export const changePasswordHandler = async (
   req: Request,
   res: Response,
