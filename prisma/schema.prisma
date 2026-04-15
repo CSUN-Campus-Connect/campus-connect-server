@@ -7,6 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+model SundialNews {
+  id        String              @id @default(uuid())
+  category  SundialNewsCategory
+  title     String
+  date      DateTime
+  link      String              @unique
+  image     String?
+  createdAt DateTime            @default(now())
+
+  @@index([category])
+  @@index([createdAt(sort: Desc)])
+}
 
 model Event {
   id          String   @id @default(uuid())
@@ -956,4 +968,11 @@ enum BugReportStatus {
   in_progress
   resolved
   closed
+}
+
+enum SundialNewsCategory {
+  news
+  sports
+  culture
+  multimedia
 }
