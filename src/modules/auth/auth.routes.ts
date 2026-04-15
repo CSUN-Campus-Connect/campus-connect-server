@@ -47,11 +47,11 @@ router.post(
   userController.refreshAccessTokenHandler,
 );
 
+// GET /api/v1/users/me - Returns the currently authenticated user's data
+router.get("/me", authenticateToken, userController.getCurrentUserHandler);
+
 // GET /api/v1/users/search?q=... - Search users by name or email
 router.get("/search", authenticateToken, userController.searchUsersHandler);
-
-// GET /api/v1/users/:id - Returns user public profile
-router.get("/:id", userController.getPublicProfile);
 
 // GET /api/v1/users/verify?token=... - Email verification, marks user as verified if token is valid
 router.get("/verify", userController.verifyEmailHandler);
@@ -59,16 +59,8 @@ router.get("/verify", userController.verifyEmailHandler);
 // POST /api/v1/users/resend-verification
 router.post("/resend-verification", userController.resendVerificationHandler);
 
-// GET /api/v1/users/me - Returns the currently authenticated user's data
-router.get("/me", authenticateToken, userController.getCurrentUserHandler);
-
-router.patch("/me/password", authenticateToken, validate(ChangePasswordSchema), userController.changePasswordHandler,);
-
-// GET /api/v1/users/:id - Returns user public profile
-router.get("/:id", userController.getPublicProfile);
-
-// DELETE /api/v1/users/:id
-router.delete("/:id", authenticateToken, userController.deleteUserHandler);
+// PATCH /api/v1/users/me/password - Change password
+router.patch("/me/password", authenticateToken, validate(ChangePasswordSchema), userController.changePasswordHandler);
 
 // PUT /api/v1/users/upsert-profile - Upsert profile
 router.put(
@@ -78,17 +70,25 @@ router.put(
   userController.upsertProfileHandler,
 );
 
-// Password reset with validation
+// POST /api/v1/users/request-password-reset - Request password reset
 router.post(
   "/request-password-reset",
   validate(requestPasswordResetSchema),
   requestPasswordResetController,
 );
 
+// POST /api/v1/users/reset-password - Reset password
 router.post(
   "/reset-password",
   validate(resetPasswordSchema),
   resetPasswordController,
 );
+
+// Generic routes (must come LAST after specific routes)
+// GET /api/v1/users/:id - Returns user public profile
+router.get("/:id", userController.getPublicProfile);
+
+// DELETE /api/v1/users/:id - Delete user account
+router.delete("/:id", authenticateToken, userController.deleteUserHandler);
 
 export default router;
