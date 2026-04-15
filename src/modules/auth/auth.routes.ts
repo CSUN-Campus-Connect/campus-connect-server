@@ -105,3 +105,5 @@ router.get("/:id", userController.getPublicProfile);
 
 // DELETE /api/v1/users/me - Delete user account
 router.delete("/me", authenticateToken, userController.deleteUserHandler);
+
+export default router;
