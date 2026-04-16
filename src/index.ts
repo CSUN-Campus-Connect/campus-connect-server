@@ -14,6 +14,7 @@ import { createServer } from "http";
 import adminRoutes from "./modules/admin/admin.routes";
 import moderationRoutes from "./modules/moderation/moderation.routes";
 import sundialRoutes from "./modules/sundial/sundial.routes";
+import securityRoutes from "./modules/security/security.routes";
 
 
 import {
@@ -82,6 +83,8 @@ app.use("/api/v1/moderation", moderationRoutes);
 logger.info("Mounted moderation routes at /api/v1/moderation");
 app.use("/api/v1/sundial", sundialRoutes);
 logger.info("Mounted sundial routes at /api/v1/sundial");
+app.use("/api/v1/security", securityRoutes);
+logger.info("Mounted security routes at /api/v1/security");
 
 const io = setupSocket(httpServer);
 logger.info("Socket.io initialized");

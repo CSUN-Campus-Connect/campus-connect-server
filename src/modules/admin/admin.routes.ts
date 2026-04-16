@@ -56,14 +56,18 @@ router.get("/analytics/overview", requirePermission("analytics:view"), adminCont
 // Clubs 
 router.get("/clubs", requirePermission("clubs:read"), adminController.getAdminClubs);
 router.delete("/clubs/:id", requirePermission("clubs:delete"), adminController.deleteAdminClub);
+router.patch("/clubs/:id/approve", requirePermission("clubs:approve"), adminController.approveClub);
+router.patch("/clubs/:id/reject", requirePermission("clubs:approve"), adminController.rejectClub);
 
 // Marketplace 
 router.get("/marketplace", requirePermission("marketplace:read"), adminController.getAdminListings);
 router.delete("/marketplace/:id", requirePermission("marketplace:moderate"), adminController.removeAdminListing);
+router.patch("/marketplace/:id/delist", requirePermission("marketplace:moderate"), adminController.delistAdminListing);
 
 // Events 
 router.get("/events", requirePermission("events:read"), adminController.getAdminEvents);
 router.delete("/events/:id", requirePermission("events:edit"), adminController.deleteAdminEvent);
+router.patch("/events/:id/delist", requirePermission("events:edit"), adminController.delistAdminEvent);
 
 // Settings 
 router.get("/config", requirePermission("system:config"), adminController.getSystemConfigs);
@@ -71,5 +75,9 @@ router.post("/config", requirePermission("system:config"), adminController.upser
 router.get("/announcements", requirePermission("system:announcements"), adminController.getAnnouncements);
 router.post("/announcements", requirePermission("system:announcements"), adminController.createAnnouncement);
 router.delete("/announcements/:id", requirePermission("system:announcements"), adminController.deleteAnnouncement);
+
+// Bug Reports
+router.get("/bugs", requirePermission("bugs:read"), adminController.getBugReports);
+router.patch("/bugs/:id", requirePermission("bugs:manage"), adminController.updateBugReport);
 
 export default router;
