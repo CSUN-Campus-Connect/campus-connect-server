@@ -451,3 +451,61 @@ export const revokeOtherSessionsHandler = async (req: Request, res: Response, ne
     next(error);
   }
 };
+
+// PUT /me/push-token — save the caller's Expo push token
+export const updatePushTokenHandler = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "unauthorized", message: "Not authenticated" });
+      return;
+    }
+
+    const { expoPushToken } = req.body as { expoPushToken?: string };
+
+    // Expo tokens always look like ExponentPushToken[...] or ExpoPushToken[...]
+    if (
+      !expoPushToken ||
+      typeof expoPushToken !== "string" ||
+      !(
+        expoPushToken.startsWith("ExponentPushToken[") ||
+        expoPushToken.startsWith("ExpoPushToken[")
+      )
+    ) {
+      res.status(400).json({
+        error: "invalid_token",
+        message: "Invalid Expo push token format",
+      });
+      return;
+    }
+
+    await userService.updateExpoPushToken(userId, expoPushToken);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to update push token");
+    res.status(500).json({ error: "server_error", message: "Could not save push token" });
+  }
+};
+
+// DELETE /me/push-token — clear token on logout
+export const clearPushTokenHandler = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "unauthorized", message: "Not authenticated" });
+      return;
+    }
+
+    await userService.clearExpoPushToken(userId);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to clear push token");
+    res.status(500).json({ error: "server_error", message: "Could not clear push token" });
+  }
+};

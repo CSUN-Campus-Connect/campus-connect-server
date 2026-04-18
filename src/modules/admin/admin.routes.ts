@@ -72,9 +72,6 @@ router.patch("/events/:id/delist", requirePermission("events:edit"), adminContro
 // Settings 
 router.get("/config", requirePermission("system:config"), adminController.getSystemConfigs);
 router.post("/config", requirePermission("system:config"), adminController.upsertSystemConfig);
-router.get("/announcements", requirePermission("system:announcements"), adminController.getAnnouncements);
-router.post("/announcements", requirePermission("system:announcements"), adminController.createAnnouncement);
-router.delete("/announcements/:id", requirePermission("system:announcements"), adminController.deleteAnnouncement);
 
 // Bug Reports
 router.get("/bugs", requirePermission("bugs:read"), adminController.getBugReports);

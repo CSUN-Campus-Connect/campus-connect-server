@@ -434,3 +434,29 @@ export const revokeOtherSessions = async (
     where: { userId, id: { not: currentSessionId } },
   });
 };
+
+// Called by the mobile app once it gets a push token from expo-notifications.
+// We need this saved so the announcement worker can actually push to devices.
+export const updateExpoPushToken = async (
+  userId: string,
+  expoPushToken: string,
+): Promise<void> => {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      expoPushToken,
+      expoPushTokenUpdatedAt: new Date(),
+    },
+  });
+};
+
+// Clear the token on logout or when Expo says the device is no longer valid.
+export const clearExpoPushToken = async (userId: string): Promise<void> => {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      expoPushToken: null,
+      expoPushTokenUpdatedAt: new Date(),
+    },
+  });
+};

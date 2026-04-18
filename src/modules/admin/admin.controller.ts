@@ -419,33 +419,6 @@ export const upsertSystemConfig = async (req: Request, res: Response): Promise<v
   }
 };
 
-export const getAnnouncements = async (req: Request, res: Response): Promise<void> => {
-  try { res.json(await adminService.getAllAnnouncements()); } catch (error) { res.status(500).json({ error: "Failed to fetch announcements" }); }
-};
-
-export const createAnnouncement = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { title, body } = req.body;
-    if (!title || !body) { res.status(400).json({ error: "title and body required" }); return; }
-    const announcement = await adminService.createNewAnnouncement(req.body, req.user!.id);
-    await logAdminAction(req, "announcement:created", `announcement:${announcement.id}`, { title });
-    res.status(201).json(announcement);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create announcement" });
-  }
-};
-
-export const deleteAnnouncement = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const id = req.params.id as string;
-    await adminService.deleteAnnouncementById(id);
-    await logAdminAction(req, "announcement:deleted", `announcement:${id}`);
-    res.json({ message: "Announcement deleted" });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete announcement" });
-  }
-};
-
 export const delistAdminEvent = async (req: Request, res: Response): Promise<void> => {
   try {
     const id = req.params.id as string;
