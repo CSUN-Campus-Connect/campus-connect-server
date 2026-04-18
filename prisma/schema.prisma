@@ -44,6 +44,10 @@ model Event {
 model User {
   id                          String              @id @default(uuid())
   email                       String              @unique
+  phoneNumber                 String?
+  emergencyAlertsOptIn        Boolean             @default(true)
+  expoPushToken               String?
+  expoPushTokenUpdatedAt      DateTime?
   firstName                   String
   lastName                    String
   isVerified                  Boolean             @default(false)
@@ -100,6 +104,9 @@ model User {
   announcements      Announcement[]     @relation("AnnouncementAuthor")
   securityReports      SecurityReport[]   @relation("SecurityReporter")
   securityAssignments  SecurityReport[]   @relation("SecurityAssignee")
+  announcementsEnded       Announcement[]           @relation("AnnouncementsEnded")
+  announcementDismissals   AnnouncementDismissal[]
+  announcementDeliveries   AnnouncementDelivery[]
 }
 
 model Student {
@@ -595,9 +602,87 @@ model Announcement {
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
 
-  author User @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  // New fields - critical alert system
+  severity             AnnouncementSeverity?
+  channels             AnnouncementChannel[]   @default([])
+  location             String?
+  testMode             Boolean                 @default(false)
+
+  // Severity chain (RED -> BLUE -> GREEN links)
+  parentAnnouncementId String?
+  parentAnnouncement   Announcement?           @relation("AnnouncementChain", fields: [parentAnnouncementId], references: [id])
+  childAnnouncements   Announcement[]          @relation("AnnouncementChain")
+
+  // Banner broadcast receipt
+  bannerBroadcastAt    DateTime?
+
+  // GREEN auto-expire
+  expiresAt            DateTime?
+
+  // End metadata
+  endedAt              DateTime?
+  endedById            String?
+  endReason            String?
+  endedBy              User?                   @relation("AnnouncementsEnded", fields: [endedById], references: [id], onDelete: SetNull)
+
+  // Fast dashboard counters
+  deliveryCounts       Json?
+
+  // Author (existing relation, unchanged)
+  author               User                    @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  // Delivery rows + dismissals
+  deliveries           AnnouncementDelivery[]
+  dismissals           AnnouncementDismissal[]
 
   @@index([isActive, startsAt])
+  @@index([severity, isActive])
+  @@index([parentAnnouncementId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model AnnouncementDelivery {
+  id                 String                     @id @default(cuid())
+  announcementId     String
+  userId             String
+  channel            AnnouncementChannel
+  status             AnnouncementDeliveryStatus @default(PENDING)
+
+  attempts           Int                        @default(0)
+  nextRetryAt        DateTime                   @default(now())
+  lastAttemptAt      DateTime?
+
+  providerMessageId  String?
+  providerReceiptId  String?
+  failReason         String?
+
+  fellBackToChannel  AnnouncementChannel?
+
+  queuedAt           DateTime                   @default(now())
+  sentAt             DateTime?
+  deliveredAt        DateTime?
+  finalizedAt        DateTime?
+
+  announcement       Announcement               @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId, channel])
+  @@index([status, nextRetryAt])
+  @@index([announcementId, channel, status])
+  @@index([providerMessageId])
+}
+
+model AnnouncementDismissal {
+  id             String       @id @default(cuid())
+  announcementId String
+  userId         String
+  dismissedAt    DateTime     @default(now())
+
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId])
 }
 
 model SystemConfig {
@@ -975,4 +1060,26 @@ enum SundialNewsCategory {
   sports
   culture
   multimedia
+}
+
+enum AnnouncementSeverity {
+  CRITICAL_RED
+  CRITICAL_BLUE
+  ALL_CLEAR_GREEN
+}
+
+enum AnnouncementChannel {
+  BANNER
+  PUSH
+  EMAIL
+  SMS
+}
+
+enum AnnouncementDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  PERMANENT_FAIL
+  SKIPPED
 }
