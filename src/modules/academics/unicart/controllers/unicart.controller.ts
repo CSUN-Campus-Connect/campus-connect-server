@@ -12,6 +12,8 @@
  */
 
 import type { Request, Response } from "express";
+
+const ALLOWED_PROXY_HOSTS = new Set(["catalog.csun.edu", "www.csun.edu"]);
 import {
   fetchDepartments,
   ingestCourses,
@@ -63,6 +65,54 @@ export async function searchCatalogEndpoint(req: Request, res: Response) {
     res.json({ success: true, data: courses, count: courses.length });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// GET /api/academics/proxy?url=<encoded-csun-url>
+/** Proxies approved CSUN URLs so the frontend can read CSUN responses without CORS errors. */
+export async function proxyCSUN(req: Request, res: Response) {
+  try {
+    const rawUrl = typeof req.query.url === "string" ? req.query.url : "";
+    if (!rawUrl) {
+      return res.status(400).json({ success: false, error: "url query parameter required" });
+    }
+
+    let target: URL;
+    try {
+      target = new URL(rawUrl);
+    } catch {
+      return res.status(400).json({ success: false, error: "invalid url" });
+    }
+
+    if (target.protocol !== "https:" || !ALLOWED_PROXY_HOSTS.has(target.hostname)) {
+      return res.status(400).json({ success: false, error: "only https://catalog.csun.edu and https://www.csun.edu URLs are allowed" });
+    }
+
+    const upstream = await fetch(target.toString(), {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (UniCart Proxy)",
+        "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
+      },
+    });
+
+    const contentType = upstream.headers.get("content-type") || "text/plain; charset=utf-8";
+    const denyReason = upstream.headers.get("x-deny-reason");
+    const body = await upstream.text();
+
+    res.status(upstream.status);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "no-store");
+    if (denyReason) res.setHeader("x-csun-deny-reason", denyReason);
+
+    if (!upstream.ok && contentType.includes("application/json")) {
+      return res.send(body);
+    }
+
+    return res.send(body);
+  } catch (err: any) {
+    return res.status(502).json({ success: false, error: err?.message || "proxy request failed" });
   }
 }
 

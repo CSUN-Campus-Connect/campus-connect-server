@@ -14,6 +14,8 @@ import {
   checkConflicts,
   exportICS,
   getSemesters,
+  ingestScrapedData,
+  proxyCSUN,
 } from "../controllers/unicart.controller";
 
 /** Adds a timeout so slow catalog requests fail cleanly. */
@@ -36,6 +38,8 @@ export function unicartRoutes() {
   router.get("/catalog/search",      scraperTimeout, searchCatalogEndpoint);
   router.get("/catalog/:dept",       scraperTimeout, getCatalogByDept);
   router.get("/semesters",                           getSemesters);
+  router.get("/proxy",               scraperTimeout, proxyCSUN);
+  router.post("/ingest",                              ingestScrapedData);
   router.get("/sections",            scraperTimeout, getSections);
   router.get("/sections/:sectionId", scraperTimeout, getSectionById);
   router.post("/conflicts",                          checkConflicts);
