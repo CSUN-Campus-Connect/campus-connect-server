@@ -34,8 +34,7 @@ app.use(helmetConfig);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true}));
 app.use(hppProtection); 
-app.use("/api/academics", academicsRoutes());
-
+app.use("/", academicsRoutes());
 
 app.use((req, res, next) => {
   const start = Date.now();

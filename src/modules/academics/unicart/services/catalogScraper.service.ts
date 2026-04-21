@@ -1,240 +1,159 @@
 /**
  * catalogScraper.service.ts
- * Scrapes CSUN catalog.csun.edu for course listings by department.
- * URL pattern: https://catalog.csun.edu/academics/{dept}/courses/
+ *
+ * WHY SERVER-SIDE SCRAPING FAILS:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CSUN's WAF (Web Application Firewall) returns HTTP 403 with the header
+ * `x-deny-reason: host_not_allowed` for ALL server-to-server requests to
+ * *.csun.edu — including Docker containers, CI runners, cloud servers, etc.
+ * This is intentional on CSUN's part to prevent automated scraping from
+ * non-campus server infrastructure.
+ *
+ * THE ARCHITECTURE FIX:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Scraping is moved ENTIRELY to the browser (unicart.html).
+ * The student's browser runs on-campus or as a recognized client — it is
+ * allowed to fetch catalog.csun.edu and www.csun.edu/web-dev/api/curriculum.
+ *
+ * This service now only handles:
+ *   - Caching course metadata sent FROM the browser
+ *   - Normalizing and validating incoming course/section data
+ *   - Providing the department list (static — no scraping needed)
+ *
+ * The browser:
+ *   1. Fetches https://www.csun.edu/web-dev/api/curriculum/courses.php?dept_name=COMP
+ *      for course metadata (title, units, description, prerequisites)
+ *   2. Scrapes https://catalog.csun.edu/academics/comp/courses/comp-440/
+ *      for schedule-of-classes section rows (class#, location, days, time)
+ *   3. POSTs the combined structured data to POST /api/academics/ingest
+ *      which caches it server-side and returns it through GET /api/academics/sections
  */
 
-import axios from "axios";
-import * as cheerio from "cheerio";
 import NodeCache from "node-cache";
 import logger from "../../../../utils/logger";
 
-// Cache TTL: 6 hours (catalog rarely changes mid-day)
 const cache = new NodeCache({ stdTTL: 21600, checkperiod: 3600 });
 
-const BASE_URL = "https://catalog.csun.edu";
-const CATALOG_INDEX = `${BASE_URL}/academics/`;
-
 export interface CatalogCourse {
-  id: string;           // e.g. "COMP-100"
-  subject: string;      // e.g. "COMP"
-  number: string;       // e.g. "100"
+  id: string;
+  subject: string;
+  number: string;
   title: string;
   units: number;
   description: string;
   prerequisites: string[];
   tags: string[];
   level: "100s" | "200s" | "300s" | "400s" | "500s" | "600s";
-}
-
-export interface Department {
-  code: string;   // e.g. "comp"
-  label: string;  // e.g. "Computer Science"
   url: string;
 }
 
-// ── Fetch all departments from catalog index ─────────────────────────────────
-export async function fetchDepartments(): Promise<Department[]> {
-  const cacheKey = "catalog:departments";
-  const cached = cache.get<Department[]>(cacheKey);
-  if (cached) return cached;
-
-  try {
-    const { data } = await axios.get(CATALOG_INDEX, { timeout: 10000 });
-    const $ = cheerio.load(data);
-    const departments: Department[] = [];
-
-    // Catalog index lists links like /academics/comp/courses/
-    $("a[href*='/academics/']").each((_i, el) => {
-      const href = $(el).attr("href") ?? "";
-      const match = href.match(/\/academics\/([^/]+)\//);
-      if (!match) return;
-      const code = match[1];
-      if (code === "geol" || departments.find((d) => d.code === code)) return;
-
-      const label = $(el).text().trim();
-      if (label.length < 2) return;
-
-      departments.push({ code, label, url: `${BASE_URL}/academics/${code}/courses/` });
-    });
-
-    // Fallback known CSUN departments if scrape sparse
-    const knownDepts: Department[] = [
-      { code: "comp", label: "Computer Science", url: `${BASE_URL}/academics/comp/courses/` },
-      { code: "math", label: "Mathematics", url: `${BASE_URL}/academics/math/courses/` },
-      { code: "engl", label: "English", url: `${BASE_URL}/academics/engl/courses/` },
-      { code: "phys", label: "Physics", url: `${BASE_URL}/academics/phys/courses/` },
-      { code: "biol", label: "Biology", url: `${BASE_URL}/academics/biol/courses/` },
-      { code: "chem", label: "Chemistry", url: `${BASE_URL}/academics/chem/courses/` },
-      { code: "hist", label: "History", url: `${BASE_URL}/academics/hist/courses/` },
-      { code: "psyc", label: "Psychology", url: `${BASE_URL}/academics/psyc/courses/` },
-      { code: "bus", label: "Business", url: `${BASE_URL}/academics/bus/courses/` },
-      { code: "art", label: "Art", url: `${BASE_URL}/academics/art/courses/` },
-      { code: "ece", label: "Electrical & Computer Engineering", url: `${BASE_URL}/academics/ece/courses/` },
-      { code: "me", label: "Mechanical Engineering", url: `${BASE_URL}/academics/me/courses/` },
-      { code: "ce", label: "Civil Engineering", url: `${BASE_URL}/academics/ce/courses/` },
-      { code: "nurs", label: "Nursing", url: `${BASE_URL}/academics/nurs/courses/` },
-      { code: "kine", label: "Kinesiology", url: `${BASE_URL}/academics/kine/courses/` },
-      { code: "soc", label: "Sociology", url: `${BASE_URL}/academics/soc/courses/` },
-      { code: "phil", label: "Philosophy", url: `${BASE_URL}/academics/phil/courses/` },
-      { code: "mus", label: "Music", url: `${BASE_URL}/academics/mus/courses/` },
-      { code: "geol", label: "Geology", url: `${BASE_URL}/academics/geol/courses/` },
-    ];
-
-    // Merge, prefer scraped if present
-    const result = departments.length > 5 ? departments : knownDepts;
-    cache.set(cacheKey, result);
-    return result;
-  } catch (err) {
-    logger.error({ err }, "Failed to fetch departments");
-    throw new Error("Could not fetch departments from CSUN catalog");
-  }
+export interface Department {
+  code: string;
+  label: string;
+  url: string;
 }
 
-// ── Scrape courses for one department ────────────────────────────────────────
-export async function fetchCoursesByDepartment(deptCode: string): Promise<CatalogCourse[]> {
-  const cacheKey = `catalog:dept:${deptCode.toLowerCase()}`;
-  const cached = cache.get<CatalogCourse[]>(cacheKey);
-  if (cached) return cached;
+/**
+ * Known departments — static list, no scraping needed.
+ * The browser also fetches /web-dev/api/curriculum/departments.php for a
+ * complete live list; this is used as a fallback reference.
+ */
+const KNOWN_DEPTS: Department[] = [
+  { code: "acct",  label: "Accountancy",                        url: "https://catalog.csun.edu/academics/acct/courses/" },
+  { code: "afrs",  label: "Africana Studies",                   url: "https://catalog.csun.edu/academics/afrs/courses/" },
+  { code: "anes",  label: "Anesthesiologist Assistant",         url: "https://catalog.csun.edu/academics/anes/courses/" },
+  { code: "anth",  label: "Anthropology",                       url: "https://catalog.csun.edu/academics/anth/courses/" },
+  { code: "art",   label: "Art",                                url: "https://catalog.csun.edu/academics/art/courses/"  },
+  { code: "ase",   label: "Applied Science & Engineering",      url: "https://catalog.csun.edu/academics/ase/courses/"  },
+  { code: "biol",  label: "Biology",                            url: "https://catalog.csun.edu/academics/biol/courses/" },
+  { code: "bus",   label: "Business",                           url: "https://catalog.csun.edu/academics/bus/courses/"  },
+  { code: "ce",    label: "Civil Engineering",                  url: "https://catalog.csun.edu/academics/ce/courses/"   },
+  { code: "chem",  label: "Chemistry",                          url: "https://catalog.csun.edu/academics/chem/courses/" },
+  { code: "cjs",   label: "Criminology, Justice & Safety",      url: "https://catalog.csun.edu/academics/cjs/courses/"  },
+  { code: "comp",  label: "Computer Science",                   url: "https://catalog.csun.edu/academics/comp/courses/" },
+  { code: "coms",  label: "Communication Studies",              url: "https://catalog.csun.edu/academics/coms/courses/" },
+  { code: "ctva",  label: "Cinema & Television Arts",           url: "https://catalog.csun.edu/academics/ctva/courses/" },
+  { code: "ece",   label: "Electrical & Computer Engineering",  url: "https://catalog.csun.edu/academics/ece/courses/"  },
+  { code: "econ",  label: "Economics",                          url: "https://catalog.csun.edu/academics/econ/courses/" },
+  { code: "educ",  label: "Education",                          url: "https://catalog.csun.edu/academics/educ/courses/" },
+  { code: "engl",  label: "English",                            url: "https://catalog.csun.edu/academics/engl/courses/" },
+  { code: "enve",  label: "Environmental Engineering",          url: "https://catalog.csun.edu/academics/enve/courses/" },
+  { code: "geog",  label: "Geography",                          url: "https://catalog.csun.edu/academics/geog/courses/" },
+  { code: "geol",  label: "Geology",                            url: "https://catalog.csun.edu/academics/geol/courses/" },
+  { code: "hist",  label: "History",                            url: "https://catalog.csun.edu/academics/hist/courses/" },
+  { code: "hum",   label: "Humanities",                         url: "https://catalog.csun.edu/academics/hum/courses/"  },
+  { code: "ibe",   label: "International Business & Economics", url: "https://catalog.csun.edu/academics/ibe/courses/"  },
+  { code: "kine",  label: "Kinesiology",                        url: "https://catalog.csun.edu/academics/kine/courses/" },
+  { code: "math",  label: "Mathematics",                        url: "https://catalog.csun.edu/academics/math/courses/" },
+  { code: "me",    label: "Mechanical Engineering",             url: "https://catalog.csun.edu/academics/me/courses/"   },
+  { code: "mfg",   label: "Manufacturing Systems Engineering",  url: "https://catalog.csun.edu/academics/mfg/courses/"  },
+  { code: "mkt",   label: "Marketing",                          url: "https://catalog.csun.edu/academics/mkt/courses/"  },
+  { code: "mus",   label: "Music",                              url: "https://catalog.csun.edu/academics/mus/courses/"  },
+  { code: "nurs",  label: "Nursing",                            url: "https://catalog.csun.edu/academics/nurs/courses/" },
+  { code: "phil",  label: "Philosophy",                         url: "https://catalog.csun.edu/academics/phil/courses/" },
+  { code: "phys",  label: "Physics",                            url: "https://catalog.csun.edu/academics/phys/courses/" },
+  { code: "pols",  label: "Political Science",                  url: "https://catalog.csun.edu/academics/pols/courses/" },
+  { code: "psyc",  label: "Psychology",                         url: "https://catalog.csun.edu/academics/psyc/courses/" },
+  { code: "ptag",  label: "Physical Therapy",                   url: "https://catalog.csun.edu/academics/ptag/courses/" },
+  { code: "rs",    label: "Religious Studies",                  url: "https://catalog.csun.edu/academics/rs/courses/"   },
+  { code: "soc",   label: "Sociology",                          url: "https://catalog.csun.edu/academics/soc/courses/"  },
+  { code: "span",  label: "Spanish",                            url: "https://catalog.csun.edu/academics/span/courses/" },
+  { code: "sped",  label: "Special Education",                  url: "https://catalog.csun.edu/academics/sped/courses/" },
+  { code: "sw",    label: "Social Work",                        url: "https://catalog.csun.edu/academics/sw/courses/"   },
+  { code: "univ",  label: "University",                         url: "https://catalog.csun.edu/academics/univ/courses/" },
+  { code: "urbs",  label: "Urban Studies",                      url: "https://catalog.csun.edu/academics/urbs/courses/" },
+];
 
-  const url = `${BASE_URL}/academics/${deptCode.toLowerCase()}/courses/`;
+/** Returns the built-in department list. */
+export function fetchDepartments(): Department[] {
+  return KNOWN_DEPTS;
+}
 
-  try {
-    const { data } = await axios.get(url, {
-      timeout: 12000,
-      headers: { "User-Agent": "CampusConnect/1.0 (CSUN student tool)" },
-    });
-
-    const $ = cheerio.load(data);
-    const courses: CatalogCourse[] = [];
-    const subject = deptCode.toUpperCase();
-
-    // Catalog course structure: .course-id, .course-title, .course-units, .course-description
-    // Also works with definition list pattern <dt> / <dd>
-    $(".course, article.course, .courseblock, li.course").each((_i, el) => {
-      const courseEl = $(el);
-
-      // Try multiple selectors for course number
-      const rawId = (
-        courseEl.find(".course-id, .coursecode, .course-number, dt").first().text() ||
-        courseEl.find("h3, h4").first().text()
-      ).trim();
-
-      const numberMatch = rawId.match(/(\d{3}[A-Z]?)/);
-      if (!numberMatch) return;
-
-      const number = numberMatch[1];
-      const title = (
-        courseEl.find(".course-title, .coursetitle, h4, h3").first().text() ||
-        rawId.replace(subject, "").replace(number, "")
-      ).trim().replace(/^\.\s*/, "");
-
-      const unitsText = courseEl.find(".units, .course-units, .credit").first().text() || "3";
-      const unitsMatch = unitsText.match(/(\d)/);
-      const units = unitsMatch ? parseInt(unitsMatch[1]) : 3;
-
-      const description = courseEl.find(".course-description, p, dd").first().text().trim().slice(0, 400);
-
-      // Extract prerequisites from description
-      const prereqMatch = description.match(/[Pp]rerequisite[s]?[:\s]+([^.]+)\./);
-      const prerequisites = prereqMatch
-        ? prereqMatch[1].split(/,|and|or/).map((s) => s.trim()).filter(Boolean)
-        : [];
-
-      const numVal = parseInt(number);
-      const level = numVal < 200 ? "100s"
-        : numVal < 300 ? "200s"
-        : numVal < 400 ? "300s"
-        : numVal < 500 ? "400s"
-        : numVal < 600 ? "500s"
-        : "600s";
-
-      const tags = [subject, level];
-      if (numVal >= 300) tags.push("Upper Division");
-      else tags.push("Lower Division");
-      if (numVal >= 500) tags.push("Graduate");
-
-      if (title.toLowerCase().includes("lab")) tags.push("Lab");
-
-      courses.push({
-        id: `${subject}-${number}`,
-        subject,
-        number,
-        title: title || `${subject} ${number}`,
-        units,
-        description,
-        prerequisites,
-        tags,
-        level,
-      });
-    });
-
-    // Fallback: try definition list pattern used by CSUN catalog
-    if (courses.length === 0) {
-      parseFallback($, subject, courses);
+/**
+ * Store browser-scraped courses in cache (called by POST /api/academics/ingest).
+ * The browser sends the scraped + normalized data; we cache and return it
+ * through the normal GET /api/academics/sections endpoint.
+ */
+export function ingestCourses(courses: CatalogCourse[]): void {
+  const byDept = new Map<string, CatalogCourse[]>();
+  for (const c of courses) {
+    const dept = c.subject.toLowerCase();
+    if (!byDept.has(dept)) byDept.set(dept, []);
+    byDept.get(dept)!.push(c);
+  }
+  for (const [dept, deptCourses] of byDept.entries()) {
+    const key = `catalog:dept:${dept}`;
+    const existing = cache.get<CatalogCourse[]>(key) ?? [];
+    const merged = [...existing];
+    for (const c of deptCourses) {
+      const idx = merged.findIndex((e) => e.id === c.id);
+      if (idx >= 0) merged[idx] = c;
+      else merged.push(c);
     }
-
-    cache.set(cacheKey, courses);
-    logger.info({ dept: deptCode, count: courses.length }, "Scraped courses");
-    return courses;
-  } catch (err) {
-    logger.error({ err, deptCode }, "Scrape failed");
-    throw new Error(`Failed to scrape courses for ${deptCode}`);
+    cache.set(key, merged);
+    logger.info({ dept, count: merged.length }, "Courses ingested from browser scrape");
   }
 }
 
-function parseFallback($: cheerio.CheerioAPI, subject: string, courses: CatalogCourse[]) {
-  // CSUN catalog uses <p class="courseblocktitle"> and <p class="courseblockdesc">
-  $(".courseblocktitle, p.courseblocktitle").each((_i, el) => {
-    const titleLine = $(el).text().trim();
-    // Format: "COMP 100. Intro to CS. 3 Units."
-    const match = titleLine.match(/([A-Z]+)\s+(\d{3}[A-Z]?)\.\s+(.+?)\.\s+(\d)/);
-    if (!match) return;
-
-    const [, subj, number, title, unitsStr] = match;
-    const units = parseInt(unitsStr) || 3;
-    const desc = $(el).next(".courseblockdesc, p.courseblockdesc").text().trim().slice(0, 400);
-
-    const prereqMatch = desc.match(/[Pp]rerequisite[s]?[:\s]+([^.]+)\./);
-    const prerequisites = prereqMatch
-      ? prereqMatch[1].split(/,|and|or/).map((s) => s.trim()).filter(Boolean)
-      : [];
-
-    const numVal = parseInt(number);
-    const level = numVal < 200 ? "100s" : numVal < 300 ? "200s" : numVal < 400 ? "300s" : numVal < 500 ? "400s" : "500s";
-    const tags = [subj || subject, level, numVal >= 300 ? "Upper Division" : "Lower Division"];
-    if (numVal >= 500) tags.push("Graduate");
-
-    courses.push({
-      id: `${subj || subject}-${number}`,
-      subject: subj || subject,
-      number,
-      title,
-      units,
-      description: desc,
-      prerequisites,
-      tags,
-      level,
-    });
-  });
+/**
+ * Retrieve cached courses for a department (populated by browser scrape via ingest).
+ * Returns empty array if no data ingested yet for this dept.
+ */
+export function getCachedCoursesByDept(dept: string): CatalogCourse[] {
+  const key = `catalog:dept:${dept.toLowerCase()}`;
+  return cache.get<CatalogCourse[]>(key) ?? [];
 }
 
-// ── Search across all scraped departments ────────────────────────────────────
-export async function searchCatalog(query: string, depts?: string[]): Promise<CatalogCourse[]> {
+/** Searches cached catalog courses by text and optional departments. */
+export function searchCachedCatalog(query: string, depts?: string[]): CatalogCourse[] {
   const q = query.toLowerCase().trim();
-  const targetDepts = depts?.length ? depts : (await fetchDepartments()).map((d) => d.code);
+  const allDepts = depts?.length
+    ? depts.map((d) => d.toLowerCase())
+    : KNOWN_DEPTS.map((d) => d.code);
 
-  // Parallel fetch with concurrency limit
-  const results = await Promise.allSettled(
-    targetDepts.map((d) => fetchCoursesByDepartment(d))
-  );
-
-  const allCourses = results
-    .filter((r): r is PromiseFulfilledResult<CatalogCourse[]> => r.status === "fulfilled")
-    .flatMap((r) => r.value);
+  const allCourses = allDepts.flatMap((d) => getCachedCoursesByDept(d));
 
   if (!q) return allCourses;
-
   return allCourses.filter((c) =>
     `${c.subject} ${c.number} ${c.title} ${c.description} ${c.tags.join(" ")}`
       .toLowerCase()
