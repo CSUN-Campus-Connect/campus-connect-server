@@ -106,4 +106,17 @@ router.get("/:id", userController.getPublicProfile);
 // DELETE /api/v1/users/me - Delete user account
 router.delete("/me", authenticateToken, userController.deleteUserHandler);
 
+// Push token registration for mobile app
+router.put(
+  "/me/push-token",
+  authenticateToken,
+  userController.updatePushTokenHandler,
+);
+
+router.delete(
+  "/me/push-token",
+  authenticateToken,
+  userController.clearPushTokenHandler,
+);
+
 export default router;
