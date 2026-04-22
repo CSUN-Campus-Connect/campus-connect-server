@@ -22,6 +22,9 @@ export const registerSchema = z.object({
       .string()
       .min(2, { message: "Last name must be at least 2 characters" })
       .max(20, { message: "Last name must not exceed 20 characters" }),
+      phoneNumber: z
+      .string()
+      .optional(),
   }),
 });
 

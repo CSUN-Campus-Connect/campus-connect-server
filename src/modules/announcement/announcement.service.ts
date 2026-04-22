@@ -136,9 +136,8 @@ export const getDeliveryStats = async (announcementId: string) => {
 // Create a new CRITICAL_RED alert
 export const createCriticalAnnouncement = async (
   actor: { id: string; email: string },
-  input: CreateCriticalInput,
+  input: CreateCriticalInput & { overrideRateLimit?: boolean },
 ) => {
-  // Defense-in-depth: UI + route + service all check authorization
   if (!isCriticalSendAuthorized(actor.email)) {
     throw new UnauthorizedError();
   }
@@ -151,7 +150,9 @@ export const createCriticalAnnouncement = async (
     throw new InvalidTransitionError("<none>", input.severity);
   }
 
-  await assertRateLimits(actor.id);
+  if (!input.overrideRateLimit) {
+    await assertRateLimits(actor.id);
+  }
 
   // Only one active critical allowed at a time
   const existing = await prisma.announcement.findFirst({
