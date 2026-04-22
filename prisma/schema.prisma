@@ -224,28 +224,33 @@ model Post {
 }
 
 model MarketplaceListing {
-  id            String                @id @default(cuid())
-  title         String
-  description   String
-  price         Float
-  originalPrice Float?
-  images        String[]              @default([])
-  condition     ItemCondition
-  category      MarketplaceCategory
-  location      String
-  views         Int                   @default(0)
-  status        ListingStatus         @default(active)
-  sellerId      String
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  seller        User                  @relation("MarketplaceListings", fields: [sellerId], references: [id], onDelete: Cascade)
-  favoritedBy   MarketplaceFavorite[]
+  id                  String                @id @default(cuid())
+  title               String
+  description         String
+  price               Float
+  originalPrice       Float?
+  images              String[]              @default([])
+  condition           ItemCondition
+  category            MarketplaceCategory
+  location            String
+  meetupLocation      String?
+  listingType         ListingType           @default(sale)
+  rentalPrice         Float?
+  rentalDurationDays  Int?
+  views               Int                   @default(0)
+  status              ListingStatus         @default(active)
+  sellerId            String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  seller              User                  @relation("MarketplaceListings", fields: [sellerId], references: [id], onDelete: Cascade)
+  favoritedBy         MarketplaceFavorite[]
 
   @@index([category])
   @@index([status])
   @@index([createdAt])
   @@index([sellerId])
   @@index([price])
+  @@index([listingType])
 }
 
 model MarketplaceFavorite {
@@ -838,6 +843,12 @@ enum ItemCondition {
   good
   fair
   poor
+}
+
+enum ListingType {
+  sale
+  rent
+  free
 }
 
 enum ListingStatus {
