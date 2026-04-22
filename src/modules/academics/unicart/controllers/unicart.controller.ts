@@ -1,253 +1,188 @@
 /**
- * unicart.controller.ts
+ * unicart.controller.ts  v5
  *
- * Architecture change: scraping moved to browser (unicart.html).
- * Backend receives real scraped data via POST /api/academics/ingest,
- * caches it, and serves it through the existing GET endpoints.
- *
- * New endpoint:
- *   POST /api/academics/ingest
- *   Body: { courses: CatalogCourse[], sections: CourseSection[] }
- *   Called by the browser after scraping CSUN catalog pages.
+ * Endpoints:
+ *   GET  /api/academics/departments          → dept list
+ *   GET  /api/academics/semesters            → supported semesters
+ *   GET  /api/academics/courses/:dept        → all courses for a dept (catalog scrape)
+ *   GET  /api/academics/sections             → sections via CSUN Curriculum API
+ *   POST /api/academics/conflicts            → conflict check
+ *   POST /api/academics/export/ics           → ICS download
  */
 
 import type { Request, Response } from "express";
-
-const ALLOWED_PROXY_HOSTS = new Set(["catalog.csun.edu", "www.csun.edu"]);
 import {
   fetchDepartments,
-  ingestCourses,
-  getCachedCoursesByDept,
-  searchCachedCatalog,
-} from "../services/catalogScraper.service";
-import {
-  querySections,
-  ingestSections,
-  enrichSectionsWithCatalog,
-  generateICS,
-  detectConflicts,
-  findSectionById,
+  fetchDeptCourses,
+  searchSections,
   getSupportedSemesters,
-  type SectionQuery,
-  type CourseSection,
-} from "../services/cart.service";
+  generateICS,
+  type CartEntry,
+} from "../services/unicart.service";
 
-// GET /api/academics/departments
-/** Returns the available academic departments. */
+// ── GET /api/academics/departments ───────────────────────────────────────────
 export async function getDepartments(_req: Request, res: Response) {
   try {
-    const depts = fetchDepartments();
-    res.json({ success: true, data: depts });
+    const data = await fetchDepartments();
+    res.json({ success: true, data, count: data.length });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
 }
 
-// GET /api/academics/catalog/:dept
-/** Returns cached catalog courses for one department. */
-export async function getCatalogByDept(req: Request, res: Response) {
+// ── GET /api/academics/semesters ─────────────────────────────────────────────
+export function getSemesters(_req: Request, res: Response) {
+  res.json({ success: true, data: getSupportedSemesters() });
+}
+
+// ── GET /api/academics/courses/:dept ─────────────────────────────────────────
+export async function getCoursesByDept(req: Request, res: Response) {
   try {
-    const dept = Array.isArray(req.params.dept) ? req.params.dept[0] : req.params.dept;
-    const courses = getCachedCoursesByDept(dept);
+    const dept = String(req.params.dept ?? "").trim();
+    if (!dept) return res.status(400).json({ success: false, error: "dept required" });
+
+    const courses = await fetchDeptCourses(dept);
     res.json({ success: true, data: courses, count: courses.length });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
 }
 
-// GET /api/academics/catalog/search?q=&depts=
-/** Searches cached catalog courses by text. */
-export async function searchCatalogEndpoint(req: Request, res: Response) {
-  try {
-    const q = (req.query.q as string) ?? "";
-    const depts = req.query.depts ? (req.query.depts as string).split(",") : undefined;
-    const courses = searchCachedCatalog(q, depts);
-    res.json({ success: true, data: courses, count: courses.length });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-}
-
-// GET /api/academics/proxy?url=<encoded-csun-url>
-/** Proxies approved CSUN URLs so the frontend can read CSUN responses without CORS errors. */
-export async function proxyCSUN(req: Request, res: Response) {
-  try {
-    const rawUrl = typeof req.query.url === "string" ? req.query.url : "";
-    if (!rawUrl) {
-      return res.status(400).json({ success: false, error: "url query parameter required" });
-    }
-
-    let target: URL;
-    try {
-      target = new URL(rawUrl);
-    } catch {
-      return res.status(400).json({ success: false, error: "invalid url" });
-    }
-
-    if (target.protocol !== "https:" || !ALLOWED_PROXY_HOSTS.has(target.hostname)) {
-      return res.status(400).json({ success: false, error: "only https://catalog.csun.edu and https://www.csun.edu URLs are allowed" });
-    }
-
-    const upstream = await fetch(target.toString(), {
-      method: "GET",
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (UniCart Proxy)",
-        "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
-      },
-    });
-
-    const contentType = upstream.headers.get("content-type") || "text/plain; charset=utf-8";
-    const denyReason = upstream.headers.get("x-deny-reason");
-    const body = await upstream.text();
-
-    res.status(upstream.status);
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "no-store");
-    if (denyReason) res.setHeader("x-csun-deny-reason", denyReason);
-
-    if (!upstream.ok && contentType.includes("application/json")) {
-      return res.send(body);
-    }
-
-    return res.send(body);
-  } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || "proxy request failed" });
-  }
-}
-
-// POST /api/academics/ingest
-// Called by unicart.html after scraping CSUN pages in the browser.
-// Body: { courses?: CatalogCourse[], sections?: CourseSection[] }
-/** Stores browser-scraped courses and sections in cache. */
-export async function ingestScrapedData(req: Request, res: Response) {
-  try {
-    const { courses, sections } = req.body;
-    let coursesStored = 0;
-    let sectionsStored = 0;
-
-    if (Array.isArray(courses) && courses.length > 0) {
-      ingestCourses(courses);
-      coursesStored = courses.length;
-    }
-
-    if (Array.isArray(sections) && sections.length > 0) {
-      sectionsStored = ingestSections(sections as CourseSection[]);
-    }
-
-    res.json({
-      success: true,
-      coursesIngested: coursesStored,
-      sectionsIngested: sectionsStored,
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-}
-
-// GET /api/academics/sections
-/** Returns section results that match the query filters. */
+// ── GET /api/academics/sections ──────────────────────────────────────────────
+// Query params:
+//   subject  — required dept code, e.g. "COMP"
+//   search   — optional course filter, e.g. "440" or "comp 440"
+//   semester — e.g. "Spring 2026"
+//   limit    — max courses to hydrate with sections (default 20)
+//   isOnline — "true" | "false"
+//   level    — "100s" | "200s" | "300s" | "400s" | "500s+"
 export async function getSections(req: Request, res: Response) {
   try {
-    const query: SectionQuery = {
-      semester: (req.query.semester as string) ?? getSupportedSemesters()[0],
-      subject: req.query.subject as string | undefined,
-      search: req.query.search as string | undefined,
-      level: req.query.level as string | undefined,
-      tag: req.query.tag as string | undefined,
-      days: req.query.days ? (req.query.days as string).split(",") : undefined,
-      unitsMin: req.query.unitsMin ? Number(req.query.unitsMin) : undefined,
-      unitsMax: req.query.unitsMax ? Number(req.query.unitsMax) : undefined,
-      isOnline: req.query.isOnline !== undefined ? req.query.isOnline === "true" : undefined,
-      openOnly: req.query.openOnly === "true",
-      page: req.query.page ? Number(req.query.page) : 1,
-      limit: req.query.limit ? Number(req.query.limit) : 50,
-    };
+    const subject  = String(req.query.subject  ?? req.query.dept ?? "").trim().toUpperCase();
+    const search   = String(req.query.search   ?? "").trim();
+    const semester = String(req.query.semester ?? getSupportedSemesters()[0]).trim();
+    const limit    = Math.min(40, Math.max(1, Number(req.query.limit ?? 20)));
+    const isOnlineFilter = req.query.isOnline !== undefined
+      ? req.query.isOnline === "true"
+      : undefined;
+    const levelFilter = String(req.query.level ?? "").trim();
 
-    const { sections, total } = await querySections(query);
+    if (!subject) {
+      return res.status(400).json({ success: false, error: "subject param required" });
+    }
 
-    if (req.query.enrich === "true" && query.subject) {
-      try {
-        const catalog = getCachedCoursesByDept(query.subject);
-        if (catalog.length) {
-          const enriched = enrichSectionsWithCatalog(sections, catalog);
-          return res.json({ success: true, data: enriched, total, page: query.page, limit: query.limit });
-        }
-      } catch {
-        // fall through
+    const raw = await searchSections({ dept: subject, search, semester, limit });
+
+    // Flatten to section-per-row shape that the frontend expects
+    const sections: any[] = [];
+    for (const course of raw) {
+      for (const s of course.sections) {
+        if (isOnlineFilter !== undefined && s.isOnline !== isOnlineFilter) continue;
+        if (levelFilter && !course.tags.includes(levelFilter)) continue;
+
+        sections.push({
+          // IDs
+          sectionId:     s.classNumber,
+          courseId:      course.courseKey,
+          // Course info
+          subject:       course.subject,
+          number:        course.number,
+          title:         course.title,
+          units:         course.units,
+          semester,
+          description:   course.description,
+          prerequisites: course.prerequisites ? [course.prerequisites] : [],
+          tags:          course.tags,
+          // Section info
+          professor:     s.instructor ?? "TBA",
+          days:          s.days,
+          startTime:     s.startTime,
+          endTime:       s.endTime,
+          location:      s.location,
+          isOnline:      s.isOnline,
+          rawDays:       s.rawDays,
+          rawTime:       s.rawTime,
+          // Enrollment data from curriculum API
+          seats:         s.enrollMax,
+          seatsAvailable: Math.max(0, s.enrollMax - s.enrolled),
+          enrolled:      s.enrolled,
+          enrollMax:     s.enrollMax,
+          waitlistCount: s.waitlisted,
+          courseType:    null,
+          linkedLab:     null,
+          materialCost:  0,
+        });
       }
     }
 
-    res.json({ success: true, data: sections, total, page: query.page, limit: query.limit });
+    res.json({ success: true, data: sections, total: sections.length });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
 }
 
-// GET /api/academics/sections/:sectionId
-/** Returns one section by id and semester. */
-export async function getSectionById(req: Request, res: Response) {
-  try {
-    const sectionId =
-      typeof req.params.sectionId === "string"
-        ? req.params.sectionId
-        : req.params.sectionId?.[0];
-
-    const rawSemester = req.query.semester;
-    const semester =
-      typeof rawSemester === "string"
-        ? rawSemester
-        : getSupportedSemesters()[0];
-
-    const section = await findSectionById({ sectionId, semester });
-
-    if (!section) {
-      return res.status(404).json({ success: false, error: "Section not found" });
-    }
-
-    res.json({ success: true, data: section });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-}
-
-// POST /api/academics/conflicts
-/** Checks a list of sections for schedule conflicts. */
-export async function checkConflicts(req: Request, res: Response) {
+// ── POST /api/academics/conflicts ────────────────────────────────────────────
+export function checkConflicts(req: Request, res: Response) {
   try {
     const { sections } = req.body;
     if (!Array.isArray(sections)) {
       return res.status(400).json({ success: false, error: "sections array required" });
     }
-    const conflicts = detectConflicts(sections);
-    res.json({ success: true, data: Object.fromEntries(conflicts) });
+
+    const conflicts: Record<string, string[]> = {};
+    const inPerson = sections.filter((s: any) => !s.isOnline && s.startTime);
+
+    const toMin = (t: string) => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+
+    for (let i = 0; i < inPerson.length; i++) {
+      for (let j = i+1; j < inPerson.length; j++) {
+        const a = inPerson[i], b = inPerson[j];
+        const sharedDays = (a.days??[]).filter((d:string) => (b.days??[]).includes(d));
+        if (!sharedDays.length) continue;
+        const aStart = toMin(a.startTime), aEnd = toMin(a.endTime);
+        const bStart = toMin(b.startTime), bEnd = toMin(b.endTime);
+        if (aStart < bEnd && aEnd > bStart) {
+          const ak = `${a.subject} ${a.number}`;
+          const bk = `${b.subject} ${b.number}`;
+          conflicts[ak] = [...(conflicts[ak]??[]), bk];
+          conflicts[bk] = [...(conflicts[bk]??[]), ak];
+        }
+      }
+    }
+
+    res.json({ success: true, data: conflicts });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
 }
 
-// POST /api/academics/export/ics
-/** Exports selected sections as an ICS calendar file. */
-export async function exportICS(req: Request, res: Response) {
+// ── POST /api/academics/export/ics ───────────────────────────────────────────
+export function exportICS(req: Request, res: Response) {
   try {
     const { sections, semester } = req.body;
     if (!Array.isArray(sections) || !semester) {
       return res.status(400).json({ success: false, error: "sections and semester required" });
     }
-    const ics = generateICS(sections, semester);
+
+    const cart: CartEntry[] = sections.map((s: any) => ({
+      courseKey: s.courseId ?? `${s.subject}-${s.number}`,
+      subject:   s.subject,
+      number:    s.number,
+      title:     s.title,
+      units:     s.units,
+      sectionId: s.sectionId,
+      days:      s.days ?? [],
+      startTime: s.startTime ?? null,
+      endTime:   s.endTime ?? null,
+      location:  s.location ?? "TBA",
+      isOnline:  s.isOnline ?? false,
+    }));
+
+    const ics = generateICS(cart, semester);
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${String(semester).replace(/\s+/g, "_")}_schedule.ics"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${String(semester).replace(/\s+/g,"_")}_schedule.ics"`);
     res.send(ics);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
-}
-
-// GET /api/academics/semesters
-/** Returns the list of supported semesters. */
-export function getSemesters(_req: Request, res: Response) {
-  res.json({ success: true, data: getSupportedSemesters() });
 }

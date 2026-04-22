@@ -1,49 +1,30 @@
 /**
- * unicart.routes.ts
- * FIX: path-to-regexp v8 (router@2.x) rejects bare "*" and "(.*)".
- * Only "/{*name}" works as a catch-all wildcard in this version.
+ * unicart.routes.ts — No proxy. No ingest. Pure direct-scrape endpoints.
  */
-
-import { Router, type Request, type Response, type NextFunction } from "express";
+import { Router } from "express";
+import type { Request, Response, NextFunction } from "express";
 import {
   getDepartments,
-  getCatalogByDept,
-  searchCatalogEndpoint,
+  getSemesters,
+  getCoursesByDept,
   getSections,
-  getSectionById,
   checkConflicts,
   exportICS,
-  getSemesters,
-  ingestScrapedData,
-  proxyCSUN,
 } from "../controllers/unicart.controller";
 
-/** Adds a timeout so slow catalog requests fail cleanly. */
-function scraperTimeout(_req: Request, res: Response, next: NextFunction) {
-  res.setTimeout(30_000, () => {
-    if (!res.headersSent) {
-      res.status(503).json({ success: false, error: "Request timed out fetching catalog data" });
-    }
-  });
+const timeout = (ms: number) => (_req: Request, res: Response, next: NextFunction) => {
+  res.setTimeout(ms, () => { if (!res.headersSent) res.status(503).json({ success:false, error:"Timeout" }); });
   next();
-}
+};
 
-/** Creates the UniCart API router and registers its endpoints. */
 export function unicartRoutes() {
-  const router = Router();
-
-  router.options("/{*path}", (_req: Request, res: Response) => res.sendStatus(204));
-
-  router.get("/departments",         scraperTimeout, getDepartments);
-  router.get("/catalog/search",      scraperTimeout, searchCatalogEndpoint);
-  router.get("/catalog/:dept",       scraperTimeout, getCatalogByDept);
-  router.get("/semesters",                           getSemesters);
-  router.get("/proxy",               scraperTimeout, proxyCSUN);
-  router.post("/ingest",                              ingestScrapedData);
-  router.get("/sections",            scraperTimeout, getSections);
-  router.get("/sections/:sectionId", scraperTimeout, getSectionById);
-  router.post("/conflicts",                          checkConflicts);
-  router.post("/export/ics",                         exportICS);
-
-  return router;
+  const r = Router();
+  r.options("/{*path}", (_req, res) => res.sendStatus(204));
+  r.get("/departments",       timeout(15_000), getDepartments);
+  r.get("/semesters",                          getSemesters);
+  r.get("/courses/:dept",     timeout(20_000), getCoursesByDept);
+  r.get("/sections",          timeout(60_000), getSections);   // can scrape multiple pages
+  r.post("/conflicts",                         checkConflicts);
+  r.post("/export/ics",                        exportICS);
+  return r;
 }
