@@ -657,7 +657,7 @@ export async function fetchCourseSections(
 
   const rows = rawClasses.filter((c: any) => {
     const t = String(c.term ?? c.semester ?? "").trim();
-    if (!t) return false;
+    if (!t) return true;
     const tNorm = t.replace(/\s+/g, "-").toLowerCase();
     return tNorm === term.toLowerCase();
   });

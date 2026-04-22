@@ -510,12 +510,17 @@ function sectionCard(course, s) {
   const conflictKey = `${s.subject} ${s.number}`;
   const hasConflict = inCart && (conflictMap[conflictKey]?.length ?? 0) > 0;
 
+  const dayLabel = Array.isArray(s.days) && s.days.length ? (s.days||[]).join("/") : (s.rawDays || "TBA");
+  const timeLabel = s.startTime && s.endTime
+    ? `${fmt12(s.startTime)}–${fmt12(s.endTime)}`
+    : (s.rawTime || "TBA");
   const timeStr = s.isOnline
     ? "Online / Async"
-    : s.startTime
-      ? `${(s.days||[]).join("/")} · ${fmt12(s.startTime)}–${fmt12(s.endTime)}`
-      : "Time TBA";
-  const locStr = s.isOnline ? "🌐 Remote / Async" : s.location && s.location !== "TBA" ? `📍 ${s.location}` : "";
+    : `${dayLabel} · ${timeLabel}`;
+  const locationLabel = s.isOnline
+    ? (s.location && s.location !== "TBA" ? s.location : "Remote / Async")
+    : (s.location || "TBA");
+  const locStr = `📍 ${locationLabel}`;
 
   return `<div class="class-card${hasConflict?" conflict":inCart?" in-cart":""}" id="card-${uid}">
     <div class="card-accent"></div>
@@ -538,7 +543,6 @@ function sectionCard(course, s) {
             ? `<div class="in-cart-badge">✓ In Cart</div>`
             : `<button class="btn-add" onclick="addToCart(${JSON.stringify(course).replace(/"/g,"&quot;")}, ${JSON.stringify(s).replace(/"/g,"&quot;")})">+ ADD</button>`
           }
-          ${s.location && s.location !== "TBA" && !s.isOnline ? `<span style="font-size:.6rem;color:var(--muted);text-align:right;max-width:80px;line-height:1.3">${s.location}</span>` : ""}
         </div>
       </div>
     </div>
@@ -590,9 +594,12 @@ function renderCart() {
     const uid   = cardUid(s);
     const key   = `${s.subject} ${s.number}`;
     const hasConflict = (conflictMap[key]?.length ?? 0) > 0;
+    const dayLabel = Array.isArray(s.days) && s.days.length ? (s.days||[]).join("/") : (s.rawDays || "TBA");
+    const timeLabel = s.startTime && s.endTime
+      ? `${fmt12(s.startTime)}–${fmt12(s.endTime)}`
+      : (s.rawTime || "TBA");
     const timeStr = s.isOnline ? "🌐 Online/Async"
-      : s.startTime ? `${(s.days||[]).join("/")} · ${fmt12(s.startTime)}–${fmt12(s.endTime)}`
-      : "Time TBA";
+      : `${dayLabel} · ${timeLabel}`;
 
     return `<div class="cart-item${hasConflict ? " conflict-item" : ""}">
       <div class="cart-stripe" style="background:${color}"></div>
@@ -785,7 +792,9 @@ function printSchedule() {
   const w = window.open("", "_blank");
   const rows = cart.map((s, i) => {
     const c = PALETTE[i % PALETTE.length];
-    const t = s.isOnline ? "Online" : s.startTime ? `${(s.days||[]).join("/")} ${fmt12(s.startTime)}–${fmt12(s.endTime)}` : "TBA";
+    const dayLabel = Array.isArray(s.days) && s.days.length ? (s.days||[]).join("/") : (s.rawDays || "TBA");
+    const timeLabel = s.startTime && s.endTime ? `${fmt12(s.startTime)}–${fmt12(s.endTime)}` : (s.rawTime || "TBA");
+    const t = s.isOnline ? "Online" : `${dayLabel} ${timeLabel}`;
     return `<tr><td style="border-left:4px solid ${c};padding-left:8px">${s.subject} ${s.number}</td>
       <td>${esc(s.title || s._courseTitle || "")}</td><td>${s.units||s._courseUnits||""}</td>
       <td>${t}</td><td>${s.isOnline?"Online":s.location||"TBA"}</td><td>§${s.sectionId}</td></tr>`;
