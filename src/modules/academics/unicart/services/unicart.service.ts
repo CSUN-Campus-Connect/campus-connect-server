@@ -454,113 +454,153 @@ function parseCourseListPage(
   return courses;
 }
 
-// ── STEP 3: Sections via CSUN Curriculum API ──────────────────────────────────
+// ── STEP 3: Sections via course detail page HTML ─────────────────────────────
 //
-// The catalog HTML course detail page (/academics/comp/courses/comp-440/) contains
-// EMPTY table shells — rows are populated by client-side JavaScript. Server-side
-// fetching always returns 0 data rows. DO NOT use catalog HTML for sections.
+// CSUN course detail pages contain semester headings followed by static tables.
+// Example:
+//   Spring-2026 - Schedule of Classes
+//   CIT 101
+//   Class Number | Location | Day | Time
+//   15996 | JD1538 | MoWe | 8:30am-9:20am
 //
-// Instead, use the official CSUN Curriculum JSON API:
-//   GET https://www.csun.edu/web-dev/api/curriculum/2.0/classes/{dept}
-//     → all sections for a department (e.g. /classes/comp)
-//   GET https://www.csun.edu/web-dev/api/curriculum/2.0/classes/{dept-coursenum}
-//     → sections for a specific course (e.g. /classes/comp-440)
-//
-// Response shape (from CSUN API docs):
-// {
-//   "classes": [
-//     {
-//       "class_number": "12345",
-//       "subject": "COMP",
-//       "catalog_number": "440",
-//       "title": "Software Engineering",
-//       "units": "3",
-//       "section": "01",
-//       "instructor": "Last, First",
-//       "days": "MW",          // "MW", "TuTh", "F", "Online", "TBA"
-//       "start_time": "1000h", // 24h-ish: "1000h"=10:00, "1330h"=13:30
-//       "end_time": "1115h",
-//       "location": "JD 1600",
-//       "term": "Spring-2026",
-//       "enrollment_current": 28,
-//       "enrollment_max": 35,
-//       "waitlisted": 0,
-//       ...
-//     }
-//   ]
-// }
+// Some pages contain multiple related course blocks on the same page, for example
+// CIT 101 and CIT 101L under /academics/comp/courses/cit-101l/. We scrape the
+// selected semester blocks and keep only the rows whose course label matches the
+// requested course number.
 
 export async function fetchCourseSections(
   course: CourseListing,
   semester: string,
 ): Promise<CourseWithSections> {
-  const term    = semesterToApiTerm(semester); // "Spring-2026"
-  const apiSlug = `${course.subject.toLowerCase()}-${course.number.toLowerCase().replace(/[^0-9a-z]/g, "")}`;
-
-  // PREFERRED: term-scoped endpoint guarantees the right semester's data
-  //   GET /terms/Spring-2026/classes/comp-440
-  // FALLBACK: unscoped endpoint (returns current/default term only)
-  //   GET /classes/comp-440
-  const termUrl    = `${CURRIC}/terms/${term}/classes/${apiSlug}`;
-  const genericUrl = `${CURRIC}/classes/${apiSlug}`;
-
-  let rawClasses: any[] = [];
   try {
-    // Try term-specific first
-    const data = await fetchJson<any>(termUrl);
-    rawClasses = data?.classes ?? data?.data ?? data?.results ?? [];
-    logger.info({ url: termUrl, count: rawClasses.length }, "fetchCourseSections: term API");
+    const html = await fetchText(course.url);
+    const sections = parseCourseDetailPage(html, course, semester);
+    logger.info({ course: course.courseKey, semester, count: sections.length, url: course.url }, "fetchCourseSections done");
+    return { ...course, semester, sections };
   } catch (err: any) {
-    logger.warn({ url: termUrl, err: err.message }, "fetchCourseSections: term API failed, trying generic");
-    try {
-      const data = await fetchJson<any>(genericUrl);
-      rawClasses = data?.classes ?? data?.data ?? data?.results ?? [];
-      logger.info({ url: genericUrl, count: rawClasses.length }, "fetchCourseSections: generic API");
-    } catch (err2: any) {
-      logger.warn({ url: genericUrl, err: (err2 as any).message }, "fetchCourseSections: both API endpoints failed");
-      return { ...course, semester, sections: [] };
-    }
+    logger.warn({ course: course.courseKey, semester, url: course.url, err: err.message }, "fetchCourseSections failed");
+    return { ...course, semester, sections: [] };
+  }
+}
+
+function parseCourseDetailPage(html: string, course: CourseListing, semester: string): ClassSection[] {
+  const flat = html.replace(/\r?\n/g, " ").replace(/\t/g, " ").replace(/\s{2,}/g, " ");
+  const requestedTerm = semester.replace(/\s+/g, "-").toLowerCase();
+  const headingRe = /((Spring|Summer|Fall|Winter)-\d{4})\s*-\s*Schedule\s+of\s+Classes/gi;
+  const matches = matchAll(flat, headingRe);
+  const sections: ClassSection[] = [];
+
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    const termLabel = String(m[1] ?? "").trim();
+    if (termLabel.toLowerCase() !== requestedTerm) continue;
+
+    const start = (m.index ?? 0) + m[0].length;
+    const end = i + 1 < matches.length ? (matches[i + 1].index ?? flat.length) : flat.length;
+    const block = flat.slice(start, end);
+
+    const blockSections = parseSemesterBlock(block, course);
+    for (const s of blockSections) sections.push(s);
   }
 
-  // When using the generic endpoint, filter to requested term
-  const rows = rawClasses.filter((c: any) => {
-    const t = String(c.term ?? c.semester ?? "").trim();
-    if (!t) return true; // no term field → include all
-    const tNorm = t.replace(/\s+/g, "-").toLowerCase();
-    return tNorm === term.toLowerCase();
-  });
+  return dedupeSections(sections);
+}
 
-  const sections: ClassSection[] = rows.map((c: any) => {
-    const rawDays  = String(c.days ?? c.day ?? "").trim();
-    const rawStart = String(c.start_time ?? c.startTime ?? c.begin_time ?? "").trim();
-    const rawEnd   = String(c.end_time   ?? c.endTime   ?? c.finish_time ?? "").trim();
-    const location = String(c.location   ?? c.room      ?? c.building    ?? "TBA").trim();
+function parseSemesterBlock(block: string, course: CourseListing): ClassSection[] {
+  const out: ClassSection[] = [];
+  const targetNumber = normalizeCourseNumber(course.number);
+
+  // Find repeated: COURSE LABEL + TABLE + rows
+  const labelTableRe = /([A-Z]{2,6}\s+[0-9]+[A-Z0-9\/-]*)\s*<table[^>]*>[\s\S]*?<\/table>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = labelTableRe.exec(block)) !== null) {
+    const label = stripTags(m[1]).replace(/\s+/g, " ").trim().toUpperCase();
+    const tableHtml = m[0].slice(m[0].indexOf("<table"));
+
+    const labelMatch = label.match(/^([A-Z]{2,6})\s+([0-9]+[A-Z0-9\/-]*)$/i);
+    if (!labelMatch) continue;
+    const labelNumber = normalizeCourseNumber(labelMatch[2]);
+    if (labelNumber !== targetNumber) continue;
+
+    out.push(...parseSectionTable(tableHtml));
+  }
+
+  return out;
+}
+
+function parseSectionTable(tableHtml: string): ClassSection[] {
+  const rows = matchAll(tableHtml, /<tr[^>]*>([\s\S]*?)<\/tr>/gi);
+  const sections: ClassSection[] = [];
+
+  for (const row of rows) {
+    const cells = matchAll(row[1], /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi).map((c) => stripTags(c[1]).replace(/\s+/g, " ").trim());
+    if (cells.length < 4) continue;
+    if (/class\s*number/i.test(cells[0])) continue;
+
+    const classNumber = String(cells[0] ?? "").trim();
+    const location = String(cells[1] ?? "TBA").trim() || "TBA";
+    const rawDays = String(cells[2] ?? "").trim();
+    const rawTime = String(cells[3] ?? "").trim();
+    if (!/^\d{4,8}$/.test(classNumber)) continue;
 
     const isOnline = /^(online|async|internet|web|remote|off.?campus)/i.test(location)
-      || /^(online|async|internet)/i.test(rawDays);
+      || /^(online|async|internet)/i.test(rawDays)
+      || /^(online|async|internet)/i.test(rawTime);
 
-    const days      = isOnline ? [] : parseDays(rawDays);
-    const startTime = parseApiTime(rawStart);
-    const endTime   = parseApiTime(rawEnd);
-
-    return {
-      classNumber: String(c.class_number ?? c.classNumber ?? c.id ?? "").trim(),
+    const timeRange = parseCatalogTimeRange(rawTime);
+    sections.push({
+      classNumber,
       location,
-      days,
-      startTime,
-      endTime,
+      days: isOnline ? [] : parseDays(rawDays),
+      startTime: timeRange.startTime,
+      endTime: timeRange.endTime,
       isOnline,
       rawDays,
-      rawTime: rawStart && rawEnd ? `${rawStart}-${rawEnd}` : rawStart || "TBA",
-      instructor:  String(c.instructor ?? c.faculty ?? "TBA").trim(),
-      enrolled:    Number(c.enrollment_current ?? c.enrolled ?? 0),
-      enrollMax:   Number(c.enrollment_max     ?? c.capacity ?? 0),
-      waitlisted:  Number(c.waitlisted         ?? c.waitlist ?? 0),
-    };
-  }).filter(s => s.classNumber !== "");
+      rawTime,
+      instructor: "TBA",
+      enrolled: 0,
+      enrollMax: 0,
+      waitlisted: 0,
+    });
+  }
 
-  logger.info({ course: course.courseKey, semester, count: sections.length }, "fetchCourseSections done");
-  return { ...course, semester, sections };
+  return sections;
+}
+
+function parseCatalogTimeRange(raw: string): { startTime: string | null; endTime: string | null } {
+  const clean = String(raw ?? "").replace(/\s+/g, "").toLowerCase();
+  if (!clean || /^(tba|arr|online|async)/i.test(clean)) return { startTime: null, endTime: null };
+  const m = clean.match(/(\d{1,2}:\d{2})(am|pm)[\-–](\d{1,2}:\d{2})(am|pm)/i);
+  if (!m) return { startTime: null, endTime: null };
+  return {
+    startTime: to24FromMeridiem(m[1], m[2]),
+    endTime: to24FromMeridiem(m[3], m[4]),
+  };
+}
+
+function to24FromMeridiem(hhmm: string, meridiem: string): string {
+  const [rawH, rawM] = hhmm.split(":").map(Number);
+  let h = rawH;
+  const p = meridiem.toLowerCase();
+  if (p === "pm" && h !== 12) h += 12;
+  if (p === "am" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${String(rawM).padStart(2, "0")}`;
+}
+
+function normalizeCourseNumber(num: string): string {
+  return String(num ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+}
+
+function dedupeSections(items: ClassSection[]): ClassSection[] {
+  const seen = new Set<string>();
+  const out: ClassSection[] = [];
+  for (const s of items) {
+    const key = `${s.classNumber}|${s.location}|${s.rawDays}|${s.rawTime}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
 }
 
 /**
@@ -649,48 +689,60 @@ export async function searchSections(params: {
 }): Promise<SectionSearchResult[]> {
   const { dept, search, semester, limit = 20 } = params;
 
-  const allCourses = await fetchDeptCourses(dept);
+  const query = String(search ?? "").trim();
+  const directNumbers = extractCourseNumberCandidates(query);
+  let targets: CourseListing[] = [];
 
-  let targets = allCourses;
-  if (search?.trim()) {
-    const q = search.trim().toLowerCase();
-    const numMatch = q.match(/^(?:[a-z]{1,6}\s*)?(\d+[a-z]*)$/i);
-    targets = allCourses.filter(c => {
-      if (numMatch) return c.number.toLowerCase().startsWith(numMatch[1].toLowerCase());
-      return (
-        c.courseKey.toLowerCase().replace(/-/, " ").includes(q) ||
-        c.title.toLowerCase().includes(q) ||
-        c.number.toLowerCase().includes(q) ||
-        c.subject.toLowerCase().includes(q)
-      );
-    });
+  if (directNumbers.length) {
+    const direct = await Promise.allSettled(
+      directNumbers.map((num) => fetchDirectCourse(dept, num)),
+    );
+    targets = direct
+      .filter((r): r is PromiseFulfilledResult<CourseListing> => r.status === "fulfilled")
+      .map((r) => r.value);
   }
 
-  const batch = targets.slice(0, limit);
-  const results: SectionSearchResult[] = [];
+  if (!targets.length) {
+    const allCourses = await fetchDeptCourses(dept);
+    targets = allCourses;
+    if (query) {
+      const q = query.toLowerCase();
+      const numMatch = q.match(/^(?:[a-z]{1,6}\s*)?(\d+[a-z0-9\/]*)$/i);
+      targets = allCourses.filter((c) => {
+        if (numMatch) return normalizeCourseNumber(c.number).startsWith(normalizeCourseNumber(numMatch[1]));
+        return (
+          c.courseKey.toLowerCase().replace(/-/, " ").includes(q) ||
+          c.title.toLowerCase().includes(q) ||
+          c.number.toLowerCase().includes(q) ||
+          c.subject.toLowerCase().includes(q)
+        );
+      });
+    }
+  }
 
+  const batch = dedupeCourses(targets).slice(0, limit);
+  const results: SectionSearchResult[] = [];
   const CONCURRENCY = 4;
+
   for (let i = 0; i < batch.length; i += CONCURRENCY) {
     const chunk = batch.slice(i, i + CONCURRENCY);
-    const settled = await Promise.allSettled(
-      chunk.map(c => fetchCourseSections(c, semester)),
-    );
+    const settled = await Promise.allSettled(chunk.map((c) => fetchCourseSections(c, semester)));
     for (const r of settled) {
       if (r.status !== "fulfilled") continue;
       const course = r.value;
       const numVal = parseInt(course.number, 10) || 0;
       results.push({
-        courseKey:     course.courseKey,
-        subject:       course.subject,
-        number:        course.number,
-        slug:          course.slug,
-        title:         course.title,
-        units:         course.units,
-        description:   course.description,
+        courseKey: course.courseKey,
+        subject: course.subject,
+        number: course.number,
+        slug: course.slug,
+        title: course.title,
+        units: course.units,
+        description: course.description,
         prerequisites: course.prerequisites,
-        url:           course.url,
+        url: course.url,
         semester,
-        sections:      course.sections,
+        sections: course.sections,
         tags: [
           course.subject,
           numVal < 200 ? "100s"
@@ -705,6 +757,137 @@ export async function searchSections(params: {
 
   return results;
 }
+
+async function fetchDirectCourse(dept: string, rawNumber: string): Promise<CourseListing> {
+  const deptSlug = dept.toLowerCase().trim();
+  const upperDept = dept.toUpperCase().trim();
+  const num = String(rawNumber).trim().toUpperCase();
+  const aliases = buildDirectCourseCandidates(upperDept, num);
+  let html = "";
+  let url = "";
+
+  for (const slug of aliases) {
+    const candidate = `${CATALOG}/academics/${deptSlug}/courses/${slug}/`;
+    try {
+      html = await fetchText(candidate);
+      url = candidate;
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  if (!html || !url) {
+    throw new Error(`Course page not found for ${upperDept} ${num}`);
+  }
+
+  const parsed = parseCourseHeaderFromDetailPage(html, upperDept, num);
+  return {
+    courseKey: `${parsed.subject}-${parsed.number}`,
+    subject: parsed.subject,
+    number: parsed.number,
+    slug: url.replace(/.*\/courses\//, "").replace(/\/$/, ""),
+    title: parsed.title,
+    units: parsed.units,
+    description: parsed.description,
+    prerequisites: parsed.prerequisites,
+    url,
+  };
+}
+
+function extractCourseNumberCandidates(query: string): string[] {
+  if (!query) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const patterns = query.match(/\d+[a-z0-9\/]*/gi) ?? [];
+  for (const p of patterns) {
+    const v = p.toUpperCase();
+    if (!seen.has(v)) { seen.add(v); out.push(v); }
+  }
+  // Also handle full values like "CIT 101L" where the subject belongs in the slug.
+  const full = query.match(/([A-Z]{2,6})\s*(\d+[A-Z0-9\/]*)/i);
+  if (full) {
+    const v = `${full[1].toUpperCase()} ${full[2].toUpperCase()}`;
+    if (!seen.has(v)) { seen.add(v); out.push(v); }
+  }
+  return out;
+}
+
+function buildDirectCourseCandidates(dept: string, rawNumber: string): string[] {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const cleaned = rawNumber.toUpperCase().replace(/\s+/g, " ").trim();
+  const compact = cleaned.replace(/\s+/g, "").replace(/[^0-9A-Z]/g, "");
+  const deptPrefix = `${dept}-`;
+  const fullPrefix = cleaned.match(/^([A-Z]{2,6})\s*(\d+[A-Z0-9\/]*)$/);
+
+  const push = (s: string) => {
+    const v = s.toLowerCase().replace(/\/+$/g, "");
+    if (!seen.has(v)) { seen.add(v); candidates.push(v); }
+  };
+
+  if (fullPrefix) {
+    push(`${fullPrefix[1]}-${fullPrefix[2].replace(/[^0-9A-Z]/g, "")}`);
+  }
+  push(`${deptPrefix}${compact}`);
+  push(`${deptPrefix}${compact.replace(/([0-9])([A-Z])/g, "$1-$2")}`);
+  push(`${dept}-${compact}`);
+  push(compact);
+  push(compact.replace(/([0-9])([A-Z])/g, "$1-$2"));
+
+  return candidates;
+}
+
+function parseCourseHeaderFromDetailPage(html: string, dept: string, fallbackNumber: string): {
+  subject: string;
+  number: string;
+  title: string;
+  units: number;
+  description: string;
+  prerequisites: string;
+} {
+  const flat = html.replace(/\r?\n/g, " ").replace(/\t/g, " ").replace(/\s{2,}/g, " ");
+  const h1 = flat.match(/Course:\s*([A-Z]{2,6})\s+([0-9]+[A-Z0-9\/-]*)\.?(.*?)<\/h1>/i);
+  let subject = dept;
+  let number = fallbackNumber.toUpperCase().replace(/^([A-Z]{2,6})\s+/, "");
+  let title = `${subject} ${number}`;
+  let units = 3;
+
+  if (h1) {
+    subject = String(h1[1]).toUpperCase();
+    number = String(h1[2]).toUpperCase();
+    const rest = stripTags(h1[3]).replace(/\s+/g, " ").trim();
+    const titleMatch = rest.match(/^(.*?)(?:\((\d+(?:[\/\-]\d+)?)\))?$/);
+    if (titleMatch) {
+      title = (titleMatch[1] || title).trim();
+      units = parseInt(String(titleMatch[2] || "3").split(/[\/\-]/)[0], 10) || 3;
+    }
+  }
+
+  const descP = flat.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+  const descRaw = descP ? stripTags(descP[1]).replace(/\s+/g, " ").trim() : "";
+  let description = descRaw;
+  let prerequisites = "";
+  const prereqM = descRaw.match(/^((?:Pre|Co)requisite[^.]*\.)\s*(.*)/i);
+  if (prereqM) {
+    prerequisites = prereqM[1].replace(/^(?:Pre|Co)requisite[s]?:\s*/i, "").replace(/\.$/, "").trim();
+    description = prereqM[2].trim();
+  }
+
+  return { subject, number, title, units, description, prerequisites };
+}
+
+function dedupeCourses(items: CourseListing[]): CourseListing[] {
+  const seen = new Set<string>();
+  const out: CourseListing[] = [];
+  for (const c of items) {
+    if (seen.has(c.courseKey)) continue;
+    seen.add(c.courseKey);
+    out.push(c);
+  }
+  return out;
+}
+
 
 // ── ICS export ────────────────────────────────────────────────────────────────
 
