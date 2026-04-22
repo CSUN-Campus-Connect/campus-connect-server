@@ -3,6 +3,8 @@ import { UserType } from "@prisma/client";
 export interface PublicUser {
   id: string;
   email: string;
+  phoneNumber: string | null;
+  emergencyAlertsOptIn: boolean;
   firstName: string;
   lastName: string;
   isVerified: boolean;

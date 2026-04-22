@@ -65,6 +65,10 @@ router.get("/me", authenticateToken, userController.getCurrentUserHandler);
 // PATCH /api/v1/users/me/password - Change password
 router.patch("/me/password", authenticateToken, validate(ChangePasswordSchema), userController.changePasswordHandler,);
 
+// PATCH phone number
+router.patch("/me/phone", authenticateToken, userController.updatePhoneHandler);
+
+
 // PUT /api/v1/users/upsert-profile - Upsert profile
 router.put(
   "/upsert-profile",

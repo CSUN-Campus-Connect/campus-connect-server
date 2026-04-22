@@ -509,3 +509,27 @@ export const clearPushTokenHandler = async (
     res.status(500).json({ error: "server_error", message: "Could not clear push token" });
   }
 };
+
+export const updatePhoneHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const { phoneNumber, emergencyAlertsOptIn } = req.body;
+
+    await userService.updatePhone(
+      userId,
+      phoneNumber?.trim() || null,
+      emergencyAlertsOptIn ?? true,
+    );
+
+    return res.status(200).json({ message: "Phone updated successfully" });
+  } catch (error) {
+    logger.error(error, "auth.update_phone.failed");
+    next(error);
+  }
+};

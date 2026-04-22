@@ -5,7 +5,7 @@ import {
   MAX_ATTEMPTS,
 } from "./announcement.types";
 import { sendEmail } from "./delivery/email.delivery";
-import { sendSms } from "./delivery/sms.delivery";
+import { sendSms } from "@/services/twilio.service";
 import { sendPush } from "./delivery/push.delivery";
 import {
   recoverMissingEnqueues,
