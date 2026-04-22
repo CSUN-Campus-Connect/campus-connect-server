@@ -43,18 +43,36 @@ const statusSchema = z.enum([
   "deleted",
 ]);
 
+const listingTypeSchema = z.enum([
+  "sale",
+  "rent",
+  "free",
+]);
+
+const meetupLocationSchema = z.enum([
+  "Library Front Desk",
+  "SRC Entrance",
+  "USU Plaza",
+  "Oviatt Library",
+  "Student Center",
+]).optional();
+
 /**
  * Create Listing Validation Schema
  * 
  * Validates POST /marketplace requests
- * All fields are required except originalPrice and images
+ * All fields are required except originalPrice, images, and the new rental/meetup fields
  * 
  * Constraints:
  * - Title: 3-100 characters
  * - Description: 10-2000 characters
- * - Price: Positive number, max 2 decimal places
+ * - Price: Positive number, max 2 decimal places (required for sale, optional for free)
  * - Images: Array of valid URLs
  * - Location: 3-200 characters
+ * - ListingType: sale (default), rent, or free
+ * - MeetupLocation: Safe campus meeting spot (optional)
+ * - RentalPrice: For rentals only (optional)
+ * - RentalDurationDays: For rentals only (optional)
  */
 export const createListingSchema = z.object({
   body: z.object({
@@ -77,7 +95,9 @@ export const createListingSchema = z.object({
       .refine(
         (val) => Number.isFinite(val) && Math.abs(val * 100 - Math.round(val * 100)) < Number.EPSILON,
         { message: "Price can have at most 2 decimal places" }
-      ),
+      )
+      .optional()
+      .nullable(),
 
     originalPrice: z
       .number()
@@ -110,7 +130,49 @@ export const createListingSchema = z.object({
       .min(3, { message: "Location must be at least 3 characters" })
       .max(200, { message: "Location must not exceed 200 characters" })
       .trim(),
-  }),
+
+    listingType: listingTypeSchema.default("sale"),
+
+    meetupLocation: meetupLocationSchema,
+
+    rentalPrice: z
+      .number()
+      .positive({ message: "Rental price must be positive" })
+      .finite()
+      .optional()
+      .nullable(),
+
+    rentalDurationDays: z
+      .number()
+      .int()
+      .positive({ message: "Rental duration must be positive" })
+      .optional()
+      .nullable(),
+  }).refine(
+    (data) => {
+      // Price required for sale listings
+      if (data.listingType === "sale" && !data.price) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Price is required for sale listings",
+      path: ["price"],
+    }
+  ).refine(
+    (data) => {
+      // Rental price and duration required for rent listings
+      if (data.listingType === "rent" && (!data.rentalPrice || !data.rentalDurationDays)) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Rental price and duration are required for rental listings",
+      path: ["rentalPrice"],
+    }
+  ),
 });
 
 /**
@@ -140,7 +202,8 @@ export const updateListingSchema = z.object({
       .number()
       .positive({ message: "Price must be positive" })
       .finite()
-      .optional(),
+      .optional()
+      .nullable(),
 
     originalPrice: z
       .number()
@@ -176,6 +239,24 @@ export const updateListingSchema = z.object({
       .optional(),
 
     status: statusSchema.optional(),
+
+    listingType: listingTypeSchema.optional(),
+
+    meetupLocation: meetupLocationSchema,
+
+    rentalPrice: z
+      .number()
+      .positive({ message: "Rental price must be positive" })
+      .finite()
+      .optional()
+      .nullable(),
+
+    rentalDurationDays: z
+      .number()
+      .int()
+      .positive({ message: "Rental duration must be positive" })
+      .optional()
+      .nullable(),
   }),
 });
 
@@ -189,6 +270,7 @@ export const getListingsSchema = z.object({
   query: z.object({
     category: categorySchema.optional(),
     condition: conditionSchema.optional(),
+    listingType: listingTypeSchema.optional(),
     minPrice: z.coerce.number().positive().optional(),
     maxPrice: z.coerce.number().positive().optional(),
     search: z.string().trim().optional(),
