@@ -45,6 +45,7 @@ export const getAllListings = async (
   const {
     category,
     condition,
+    listingType,
     minPrice,
     maxPrice,
     search,
@@ -68,6 +69,11 @@ export const getAllListings = async (
   // Add condition filter if provided
   if (condition) {
     where.condition = condition;
+  }
+
+  // Add listing type filter if provided
+  if (listingType) {
+    where.listingType = listingType;
   }
 
   // Add seller filter if provided
@@ -195,6 +201,10 @@ export const createListing = async (
       condition: data.condition,
       category: data.category,
       location: data.location,
+      listingType: data.listingType,
+      meetupLocation: data.meetupLocation ?? null,
+      rentalPrice: data.rentalPrice ?? null,
+      rentalDurationDays: data.rentalDurationDays ?? null,
       sellerId: data.sellerId,
     },
     include: {

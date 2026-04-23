@@ -266,19 +266,14 @@ export const publicProfile = async (id: string) => {
 };
 
 // Deletes account using id with auth token
-export const deleteAccount = async (id: string) => {
-  const user = await prisma.user.findUnique({
-    where: { id },
-  });
+export const deleteAccount = async (id: string, password: string) => {
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) throw new Error("Invalid user id: " + id);
 
-  // Checks if user exists first
-  if (!user) throw new Error("Invalid user id:" + id);
+  const passwordValid = await bcrypt.compare(password, user.passwordHashed);
+  if (!passwordValid) throw new Error("Incorrect password");
 
-  const resp = await prisma.user.delete({
-    where: { id },
-  });
-
-  return resp;
+  return prisma.user.delete({ where: { id } });
 };
 
 // Seaerch Users by name or email (excludes self)
@@ -342,4 +337,126 @@ export const changePassword = async (
   });
 
   return true;
+};
+
+// Logs the first login per device each day 
+export const recordLoginHistory = async (
+  userId: string,
+  deviceLabel: string,
+  ipAddress: string | null,
+  location: string | null,
+): Promise<void> => {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const existing = await prisma.loginHistory.findFirst({
+    where: { userId, deviceLabel, createdAt: { gte: startOfDay } },
+  });
+
+  if (existing) return;
+
+  const cleanIp = ipAddress?.replace("::ffff:", "") ?? null;
+
+  await prisma.loginHistory.create({
+    data: { userId, deviceLabel, ipAddress: cleanIp, location },
+  });
+};
+
+// Creates a new session or refreshes an existing one for the same device.
+export const createUserSession = async (
+  userId: string,
+  deviceLabel: string,
+  ipAddress: string | null,
+): Promise<string> => {
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const existing = await prisma.userSession.findFirst({
+    where: { userId, deviceLabel },
+  });
+
+  if (existing) {
+    const updated = await prisma.userSession.update({
+      where: { id: existing.id },
+      data: { ipAddress, expiresAt, lastActiveAt: new Date() },
+    });
+    return updated.id;
+  }
+
+  const session = await prisma.userSession.create({
+    data: { userId, deviceLabel, ipAddress, expiresAt },
+  });
+  return session.id;
+};
+
+// Deletes a session by session and user ID for login and session management
+export const logoutUser = async (sessionId: string, userId: string): Promise<void> => {
+  await prisma.userSession.deleteMany({
+    where: { id: sessionId, userId },
+  });
+};
+
+// Generates a JWT access token with the session ID included
+export const generateAccessTokenWithSession = (
+  userId: string,
+  email: string,
+  userType: string,
+  sessionId: string,
+): string => {
+  return jwt.sign(
+    { id: userId, email, userType, sessionId },
+    authConfig.jwt_secret as string,
+    { expiresIn: authConfig.jwt_expires_in as any },
+  );
+};
+
+// Returns non-expired sessions, ordered by most recently active.
+export const getUserSessions = async (userId: string) => {
+  return prisma.userSession.findMany({
+    where: { userId, expiresAt: { gt: new Date() } },
+    orderBy: { lastActiveAt: "desc" },
+  });
+};
+
+// Returns recent login history, ordered by most recent and limited to 20 entries.
+export const getLoginHistory = async (userId: string) => {
+  return prisma.loginHistory.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+};
+
+export const revokeOtherSessions = async (
+  userId: string,
+  currentSessionId: string,
+): Promise<void> => {
+  await prisma.userSession.deleteMany({
+    where: { userId, id: { not: currentSessionId } },
+  });
+};
+
+// Called by the mobile app once it gets a push token from expo-notifications.
+// We need this saved so the announcement worker can actually push to devices.
+export const updateExpoPushToken = async (
+  userId: string,
+  expoPushToken: string,
+): Promise<void> => {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      expoPushToken,
+      expoPushTokenUpdatedAt: new Date(),
+    },
+  });
+};
+
+// Clear the token on logout or when Expo says the device is no longer valid.
+export const clearExpoPushToken = async (userId: string): Promise<void> => {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      expoPushToken: null,
+      expoPushTokenUpdatedAt: new Date(),
+    },
+  });
 };

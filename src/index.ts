@@ -8,13 +8,23 @@ import logger from "./utils/logger";
 import postsRoutes from "./modules/posts/posts.routes";
 import livestreamRoutes from "./modules/livestream/livestream.routes";
 import { uploadRoutes } from "./modules/upload/upload.routes";
+import settingsRoutes from "./modules/settings/settings.routes";
 import { setupSwaggerDocs } from "./swagger";
 import messagingRoutes from "./modules/messaging/messaging.routes";
 import { setupSocket } from "./socket";
 import { createServer } from "http";
+import adminRoutes from "./modules/admin/admin.routes";
+import moderationRoutes from "./modules/moderation/moderation.routes";
+import sundialRoutes from "./modules/sundial/sundial.routes";
+import securityRoutes from "./modules/security/security.routes";
+import announcementRoutes from "./modules/announcement/announcement.routes";
+import { setIo } from "./modules/announcement/announcement.controller";
+import { startDeliveryWorker } from "./modules/announcement/delivery.worker";
+import { sendgridWebhookHandler } from "./modules/announcement/webhooks/sendgrid.webhook";
+import { twilioWebhookHandler } from "./modules/announcement/webhooks/twilio.webhook";
 
 import {
-  helmetConfig, 
+  helmetConfig,
   corsConfig,
   apiRateLimiter,
   hppProtection,
@@ -31,9 +41,31 @@ const PORT = process.env.PORT || 8000;
 logger.info("Applying security middleware: Helmet, CORS, Rate Limiting, HPP");
 app.use(corsConfig);
 app.use(helmetConfig);
+
+// Webhook routes with their own body parsers (BEFORE global express.json)
+// SendGrid needs the raw JSON body
+// We dont use sendgrid but will be nice to have if we change it from brevo
+/*
+app.post(
+  "/api/v1/webhooks/sendgrid",
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+  sendgridWebhookHandler,
+);
+*/
+// Twilio posts form-urlencoded
+app.post(
+  "/api/v1/webhooks/twilio",
+  express.urlencoded({ extended: false }),
+  twilioWebhookHandler,
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true}));
-app.use(hppProtection); 
+app.use(hppProtection);
 app.use("/", academicsRoutes());
 
 app.use((req, res, next) => {
@@ -41,10 +73,10 @@ app.use((req, res, next) => {
   res.on("finish", () => {
    if (req.path === "/health" || (req.path === "/" && res.statusCode === 200)) return;
 
-   const duration = Date.now() - start;
+    const duration = Date.now() - start;
    const logData = {method: req.method, path: req.path, status: res.statusCode, duration: `${duration}ms`};
-  
-   if (res.statusCode >= 500) {
+
+      if (res.statusCode >= 500) {
       logger.error(logData);}
       else if (res.statusCode >= 400) {
       logger.warn(logData);}
@@ -74,9 +106,30 @@ app.use("/api/v1/messages", messagingRoutes);
 logger.info("Mounted messaging routes at /api/v1/messages");
 app.use("/api/v1/upload", uploadRoutes);
 logger.info("Mounted upload routes at /api/v1/upload");
+app.use("/api/v1/settings", settingsRoutes);
+logger.info("Mounted settings routes at /api/v1/settings");
+app.use("/api/v1/admin", adminRoutes);
+logger.info("Mounted admin routes at /api/v1/admin");
+app.use("/api/v1/moderation", moderationRoutes);
+logger.info("Mounted moderation routes at /api/v1/moderation");
+app.use("/api/v1/sundial", sundialRoutes);
+logger.info("Mounted sundial routes at /api/v1/sundial");
+app.use("/api/v1/security", securityRoutes);
+logger.info("Mounted security routes at /api/v1/security");
+app.use("/api/v1/announcements", announcementRoutes);
+logger.info("Mounted announcement routes at /api/v1/announcements");
 
 const io = setupSocket(httpServer);
 logger.info("Socket.io initialized");
+
+// Give the announcement controller a reference to io so it can broadcast
+setIo(io);
+
+// Start the delivery worker (sends emails/SMS/push in the background)
+if (process.env.NODE_ENV !== 'test') {
+  startDeliveryWorker();
+  logger.info("Announcement delivery worker started");
+}
 
 // Setup Swagger UI
 setupSwaggerDocs(app);

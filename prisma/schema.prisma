@@ -7,6 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+model SundialNews {
+  id        String              @id @default(dbgenerated("gen_random_uuid()"))
+  category  SundialNewsCategory
+  title     String
+  date      DateTime
+  link      String              @unique
+  image     String?
+  createdAt DateTime            @default(now())
+
+  @@index([category])
+  @@index([createdAt(sort: Desc)])
+}
 
 model Event {
   id          String   @id @default(uuid())
@@ -32,6 +44,10 @@ model Event {
 model User {
   id                          String              @id @default(uuid())
   email                       String              @unique
+  phoneNumber                 String?
+  emergencyAlertsOptIn        Boolean             @default(true)
+  expoPushToken               String?
+  expoPushTokenUpdatedAt      DateTime?
   firstName                   String
   lastName                    String
   isVerified                  Boolean             @default(false)
@@ -73,11 +89,24 @@ model User {
   loginHistory     LoginHistory[]
   sessions         UserSession[]
   bugReports       BugReport[]
+  bugAssignments   BugReport[]     @relation("BugAssignee")
 
   clubsCreated     Club[]           @relation("CreatedClubs")
   clubMemberships  ClubMembership[]
   clubJoinRequests ClubJoinRequest[]
   notifications    Notification[]
+
+  roles              UserRole[]
+  contentReports     ContentReport[]    @relation("ReportedByUser")
+  moderationAssigned ContentReport[]    @relation("AssignedModerator")
+  moderationActions  ModerationAction[] @relation("ModeratorActions")
+  adminAuditLogs     AdminAuditLog[]
+  announcements      Announcement[]     @relation("AnnouncementAuthor")
+  securityReports      SecurityReport[]   @relation("SecurityReporter")
+  securityAssignments  SecurityReport[]   @relation("SecurityAssignee")
+  announcementsEnded       Announcement[]           @relation("AnnouncementsEnded")
+  announcementDismissals   AnnouncementDismissal[]
+  announcementDeliveries   AnnouncementDelivery[]
 }
 
 model Student {
@@ -195,28 +224,33 @@ model Post {
 }
 
 model MarketplaceListing {
-  id            String                @id @default(cuid())
-  title         String
-  description   String
-  price         Float
-  originalPrice Float?
-  images        String[]              @default([])
-  condition     ItemCondition
-  category      MarketplaceCategory
-  location      String
-  views         Int                   @default(0)
-  status        ListingStatus         @default(active)
-  sellerId      String
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  seller        User                  @relation("MarketplaceListings", fields: [sellerId], references: [id], onDelete: Cascade)
-  favoritedBy   MarketplaceFavorite[]
+  id                  String                @id @default(cuid())
+  title               String
+  description         String
+  price               Float
+  originalPrice       Float?
+  images              String[]              @default([])
+  condition           ItemCondition
+  category            MarketplaceCategory
+  location            String
+  meetupLocation      String?
+  listingType         ListingType           @default(sale)
+  rentalPrice         Float?
+  rentalDurationDays  Int?
+  views               Int                   @default(0)
+  status              ListingStatus         @default(active)
+  sellerId            String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  seller              User                  @relation("MarketplaceListings", fields: [sellerId], references: [id], onDelete: Cascade)
+  favoritedBy         MarketplaceFavorite[]
 
   @@index([category])
   @@index([status])
   @@index([createdAt])
   @@index([sellerId])
   @@index([price])
+  @@index([listingType])
 }
 
 model MarketplaceFavorite {
@@ -386,6 +420,9 @@ model BugReport {
   description String
   steps       String?
   browser     String?
+  reportStatus BugReportStatus @default(open)
+  assignedToId    String?
+  assignedTo      User?           @relation("BugAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   attachments String[] @default([])
   createdAt   DateTime @default(now())
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -400,6 +437,8 @@ model Club {
   category    ClubCategory
   logo        String?
   isPrivate   Boolean          @default(false)
+  status      ClubStatus       @default(pending)
+  rejectionReason String?
   createdById String
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -437,6 +476,331 @@ model ClubJoinRequest {
   @@index([clubId])
   @@index([userId])
   @@index([status])
+}
+
+// Admin Portal & Roles
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model RolePermission {
+  id         String @id @default(cuid())
+  roleId     String
+  permission String
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permission])
+  @@index([roleId])
+  @@index([permission])
+}
+
+model UserRole {
+  id              String    @id @default(cuid())
+  userId          String
+  roleId          String
+  departmentScope String?
+  grantedById     String?
+  grantedAt       DateTime  @default(now())
+  expiresAt       DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, departmentScope])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model ContentReport {
+  id           String              @id @default(cuid())
+  reporterId   String
+  targetType   ContentTargetType
+  targetId     String
+  reason       ContentReportReason
+  description  String?
+  status       ModerationStatus    @default(PENDING)
+  priority     ModerationPriority  @default(NORMAL)
+  assignedToId String?
+  resolvedAt   DateTime?
+  resolution   String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  reporter   User  @relation("ReportedByUser", fields: [reporterId], references: [id], onDelete: Cascade)
+  assignedTo User? @relation("AssignedModerator", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  actions ModerationAction[]
+
+  @@index([status])
+  @@index([targetType, targetId])
+  @@index([reporterId])
+  @@index([assignedToId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model ModerationAction {
+  id          String               @id @default(cuid())
+  reportId    String
+  moderatorId String
+  action      ModerationActionType
+  note        String?
+  createdAt   DateTime             @default(now())
+
+  report    ContentReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  moderator User          @relation("ModeratorActions", fields: [moderatorId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([moderatorId])
+}
+
+model UserViolation {
+  id         String        @id @default(cuid())
+  userId     String
+  type       ViolationType
+  reason     String
+  reportId   String?
+  issuedById String
+  expiresAt  DateTime?
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([createdAt(sort: Desc)])
+}
+
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  target    String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
+}
+
+model Announcement {
+  id        String             @id @default(cuid())
+  title     String
+  body      String
+  type      AnnouncementType   @default(INFO)
+  isActive  Boolean            @default(true)
+  audience  AnnouncementTarget @default(ALL)
+  startsAt  DateTime           @default(now())
+  endsAt    DateTime?
+  authorId  String
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  // New fields - critical alert system
+  severity             AnnouncementSeverity?
+  channels             AnnouncementChannel[]   @default([])
+  location             String?
+  testMode             Boolean                 @default(false)
+
+  // Severity chain (RED -> BLUE -> GREEN links)
+  parentAnnouncementId String?
+  parentAnnouncement   Announcement?           @relation("AnnouncementChain", fields: [parentAnnouncementId], references: [id])
+  childAnnouncements   Announcement[]          @relation("AnnouncementChain")
+
+  // Banner broadcast receipt
+  bannerBroadcastAt    DateTime?
+
+  // GREEN auto-expire
+  expiresAt            DateTime?
+
+  // End metadata
+  endedAt              DateTime?
+  endedById            String?
+  endReason            String?
+  endedBy              User?                   @relation("AnnouncementsEnded", fields: [endedById], references: [id], onDelete: SetNull)
+
+  // Fast dashboard counters
+  deliveryCounts       Json?
+
+  // Author (existing relation, unchanged)
+  author               User                    @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  // Delivery rows + dismissals
+  deliveries           AnnouncementDelivery[]
+  dismissals           AnnouncementDismissal[]
+
+  @@index([isActive, startsAt])
+  @@index([severity, isActive])
+  @@index([parentAnnouncementId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model AnnouncementDelivery {
+  id                 String                     @id @default(cuid())
+  announcementId     String
+  userId             String
+  channel            AnnouncementChannel
+  status             AnnouncementDeliveryStatus @default(PENDING)
+
+  attempts           Int                        @default(0)
+  nextRetryAt        DateTime                   @default(now())
+  lastAttemptAt      DateTime?
+
+  providerMessageId  String?
+  providerReceiptId  String?
+  failReason         String?
+
+  fellBackToChannel  AnnouncementChannel?
+
+  queuedAt           DateTime                   @default(now())
+  sentAt             DateTime?
+  deliveredAt        DateTime?
+  finalizedAt        DateTime?
+
+  announcement       Announcement               @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId, channel])
+  @@index([status, nextRetryAt])
+  @@index([announcementId, channel, status])
+  @@index([providerMessageId])
+}
+
+model AnnouncementDismissal {
+  id             String       @id @default(cuid())
+  announcementId String
+  userId         String
+  dismissedAt    DateTime     @default(now())
+
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+model SecurityReport {
+  id                    String                @id @default(cuid())
+  caseNumber            String                @unique
+  reporterId            String?
+  reportType            SecurityReportType
+  urgency               SecurityUrgency
+  status                SecurityStatus        @default(SUBMITTED)
+  title                 String
+  description           String
+  location              String?
+  latitude              Float?
+  longitude             Float?
+  incidentDate          DateTime
+  isAnonymous           Boolean               @default(false)
+  anonymousToken        String?               @unique
+  assignedDepartment    SecurityDepartment
+  assignedToId          String?
+  parentReportId        String?
+  reporterRelationship  ReporterRelationship  @default(VICTIM)
+  cleryGeography        CleryGeography?
+  resolvedAt            DateTime?
+  resolutionSummary     String?
+  internalNotes         String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  reporter        User?              @relation("SecurityReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  assignedTo      User?              @relation("SecurityAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  parentReport    SecurityReport?    @relation("LinkedReports", fields: [parentReportId], references: [id])
+  childReports    SecurityReport[]   @relation("LinkedReports")
+  evidence        ReportEvidence[]
+  statusHistory   ReportStatusHistory[]
+  messages        ReportMessage[]
+  involvedParties ReportInvolvedParty[]
+
+  @@index([status])
+  @@index([assignedDepartment])
+  @@index([reporterId])
+  @@index([assignedToId])
+  @@index([urgency])
+  @@index([createdAt(sort: Desc)])
+  @@index([caseNumber])
+}
+
+model ReportEvidence {
+  id             String   @id @default(cuid())
+  reportId       String
+  uploadedById   String
+  fileUrl        String
+  fileName       String
+  fileType       String
+  fileSizeBytes  Int
+  description    String?
+  isRedacted     Boolean  @default(false)
+  checksumSha256 String
+  uploadedAt     DateTime @default(now())
+
+  report     SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+model ReportStatusHistory {
+  id             String   @id @default(cuid())
+  reportId       String
+  previousStatus String
+  newStatus      String
+  changedById    String
+  note           String?
+  createdAt      DateTime @default(now())
+
+  report    SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model ReportMessage {
+  id         String   @id @default(cuid())
+  reportId   String
+  senderId   String
+  senderRole SecurityMessageRole
+  content    String
+  isInternal Boolean  @default(false)
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  report SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, createdAt])
+}
+
+model ReportInvolvedParty {
+  id              String  @id @default(cuid())
+  reportId        String
+  name            String?
+  description     String?
+  affiliation     String?
+  relationToReporter String?
+
+  report SecurityReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
 }
 
 enum UserType {
@@ -481,6 +845,12 @@ enum ItemCondition {
   poor
 }
 
+enum ListingType {
+  sale
+  rent
+  free
+}
+
 enum ListingStatus {
   active
   sold
@@ -508,6 +878,12 @@ enum NotificationType {
   marketplaceUpdate
   followRequest
   eventReminder
+  contentReportUpdate
+  accountSuspended
+  accountWarning
+  systemAnnouncement
+  roleAssigned
+  roleRevoked
 }
 
 enum ClubRole {
@@ -534,4 +910,187 @@ enum ClubJoinStatus {
   pending
   approved
   rejected
+}
+
+enum ContentTargetType {
+  POST
+  COMMENT
+  USER
+  MARKETPLACE_LISTING
+  CLUB
+  EVENT
+  MESSAGE
+}
+
+enum ContentReportReason {
+  SPAM
+  HARASSMENT
+  HATE_SPEECH
+  VIOLENCE
+  SEXUAL_CONTENT
+  MISINFORMATION
+  SCAM
+  IMPERSONATION
+  INTELLECTUAL_PROPERTY
+  SELF_HARM
+  ILLEGAL_ACTIVITY
+  PRIVACY_VIOLATION
+  OTHER
+}
+
+enum ModerationStatus {
+  PENDING
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+}
+
+enum ModerationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ModerationActionType {
+  CONTENT_REMOVED
+  CONTENT_RESTORED
+  USER_WARNED
+  USER_SUSPENDED
+  USER_BANNED
+  REPORT_DISMISSED
+  REPORT_ESCALATED
+  NOTE_ADDED
+}
+
+enum ViolationType {
+  WARNING
+  CONTENT_REMOVAL
+  TEMPORARY_SUSPENSION
+  PERMANENT_BAN
+}
+
+enum AnnouncementType {
+  INFO
+  WARNING
+  CRITICAL
+  MAINTENANCE
+}
+
+enum AnnouncementTarget {
+  ALL
+  STUDENTS
+  FACULTY
+  ALUMNI
+}
+
+enum SecurityReportType {
+  CRIMINAL
+  SAFETY_HAZARD
+  DISCRIMINATION
+  SEXUAL_VIOLENCE
+  MISCONDUCT
+  ACADEMIC_DISHONESTY
+  DISTURBANCE
+  SUSPICIOUS_ACTIVITY
+  ESCORT_REQUEST
+  LOST_FOUND
+  PARKING
+  ANONYMOUS_TIP
+  MENTAL_HEALTH
+}
+
+enum SecurityUrgency {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  TIME_SENSITIVE
+}
+
+enum SecurityStatus {
+  DRAFT
+  SUBMITTED
+  ACKNOWLEDGED
+  UNDER_REVIEW
+  INVESTIGATION
+  ESCALATED
+  PENDING_RESOLUTION
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+enum SecurityDepartment {
+  DPS
+  OEC
+  OSCED
+  HOUSING
+  UCS
+  PARKING
+  PHYSICAL_PLANT
+}
+
+enum ReporterRelationship {
+  VICTIM
+  WITNESS
+  BYSTANDER
+  ON_BEHALF_OF
+}
+
+enum CleryGeography {
+  ON_CAMPUS
+  ON_CAMPUS_RESIDENTIAL
+  NON_CAMPUS
+  PUBLIC_PROPERTY
+}
+
+enum SecurityMessageRole {
+  REPORTER
+  HANDLER
+  INVESTIGATOR
+  SUPERVISOR
+}
+
+enum ClubStatus {
+  pending
+  approved
+  rejected
+}
+
+enum BugReportStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum SundialNewsCategory {
+  news
+  sports
+  culture
+  multimedia
+}
+
+enum AnnouncementSeverity {
+  CRITICAL_RED
+  CRITICAL_BLUE
+  ALL_CLEAR_GREEN
+}
+
+enum AnnouncementChannel {
+  BANNER
+  PUSH
+  EMAIL
+  SMS
+}
+
+enum AnnouncementDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  PERMANENT_FAIL
+  SKIPPED
 }
