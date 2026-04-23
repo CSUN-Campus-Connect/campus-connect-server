@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Planner Test Page</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: linear-gradient(180deg, #a80532 0%, #780023 100%);
+      color: #fff;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    .hero { display:flex; justify-content:space-between; align-items:center; gap:24px; margin-bottom:24px; }
+    .card {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 18px;
+      padding: 18px;
+      backdrop-filter: blur(12px);
+    }
+    .grid { display:grid; grid-template-columns: 360px 1fr; gap: 20px; }
+    label { display:block; font-size:12px; font-weight:700; margin-bottom:6px; opacity:.9; }
+    input, select, textarea, button {
+      width:100%; box-sizing:border-box; border-radius:12px; border:1px solid rgba(255,255,255,.2);
+      background: rgba(255,255,255,.08); color:#fff; padding:10px 12px; font:inherit;
+    }
+    button { cursor:pointer; font-weight:700; background:#fff; color:#780023; }
+    button.secondary { background:transparent; color:#fff; }
+    .stack { display:grid; gap:14px; }
+    .flowbox { min-height: 720px; }
+    .muted { color: rgba(255,255,255,0.75); font-size: 14px; }
+    .row { display:flex; gap:10px; }
+    .pill { display:inline-block; padding:5px 10px; border-radius:999px; background: rgba(255,255,255,0.12); font-size:12px; margin-right:6px; }
+    #root { min-height: 680px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    import React, { useCallback, useEffect, useMemo, useState } from 'https://esm.sh/react@18';
+    import { createRoot } from 'https://esm.sh/react-dom@18/client';
+    import ReactFlow, { Background, Controls, MiniMap, MarkerType } from 'https://esm.sh/@xyflow/react@12?bundle-deps';
+    import 'https://esm.sh/@xyflow/react@12/dist/style.css';
+
+    function normalizeCourseKey(s) { return s.trim().toUpperCase().replace(/\s+/g, '-'); }
+
+    function buildTierLayout(raw) {
+      const tiers = [...raw.semesters].sort((a,b)=>a.tierIndex-b.tierIndex);
+      const depts = Array.from(new Set(raw.nodes.map(n => n.department))).sort();
+      const deptIndex = new Map(depts.map((d,i)=>[d,i]));
+      const tierHeight = 220;
+      const sectorWidth = 340;
+      const yForTier = (tierIndex) => 80 + (tiers.length - 1 - tierIndex) * tierHeight;
+      const nodes = [];
+      const edges = [];
+      for (const t of tiers) {
+        nodes.push({
+          id: `tier-${t.tierIndex}`,
+          position: { x: 10, y: yForTier(t.tierIndex) - 50 },
+          data: { label: `${t.label} · ${t.totalUnits} units` },
+          draggable: false,
+          selectable: false,
+          style: {
+            width: Math.max(depts.length * sectorWidth, 900),
+            height: tierHeight - 20,
+            borderRadius: 18,
+            border: '1px solid rgba(168,5,50,0.16)',
+            background: 'rgba(255,255,255,0.45)',
+            color: '#780023',
+            fontWeight: 800,
+            padding: 14,
+          }
+        })
+      }
+      const byCell = new Map();
+      for (const n of raw.nodes) {
+        const cell = `${n.tierIndex}|${n.department}`;
+        const arr = byCell.get(cell) || [];
+        arr.push(n);
+        byCell.set(cell, arr);
+      }
+      for (const arr of byCell.values()) arr.sort((a,b)=>(a.levelBand-b.levelBand)||a.key.localeCompare(b.key));
+      const pos = new Map();
+      for (const n of raw.nodes) {
+        const dIdx = deptIndex.get(n.department) || 0;
+        const arr = byCell.get(`${n.tierIndex}|${n.department}`) || [];
+        const i = arr.findIndex(x => x.key === n.key);
+        pos.set(n.key, { x: 40 + dIdx * sectorWidth + i * 210, y: yForTier(n.tierIndex) + 18 });
+      }
+      for (const n of raw.nodes) {
+        nodes.push({
+          id: n.key,
+          position: pos.get(n.key),
+          data: { label: React.createElement('div', { style: { lineHeight: 1.2 } }, [
+            React.createElement('div', { style: { fontWeight: 900, fontSize: 14 } }, n.key.replace('-', ' ')),
+            React.createElement('div', { style: { fontSize: 11, opacity: .82, marginTop: 3 } }, n.title || ''),
+            React.createElement('div', { style: { fontSize: 10, opacity: .65, marginTop: 4 } }, `${n.department} · ${n.units || 0}u`),
+          ]) },
+          style: {
+            width: 188,
+            borderRadius: 14,
+            padding: '12px 14px',
+            border: '1px solid rgba(255,255,255,0.35)',
+            background: n.deptColor || '#f3d6df',
+            color: '#1f2937',
+            boxShadow: '0 8px 22px rgba(0,0,0,0.16)',
+            textAlign: 'center',
+          }
+        })
+      }
+      const nodeSet = new Set(nodes.map(n => n.id));
+      for (const e of raw.edges) {
+        const source = normalizeCourseKey(e.from);
+        const target = normalizeCourseKey(e.to);
+        if (!nodeSet.has(source) || !nodeSet.has(target)) continue;
+        edges.push({
+          id: `${source}->${target}`,
+          source,
+          target,
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: 'rgba(168,5,50,0.7)', strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: 'rgba(168,5,50,0.7)' },
+        })
+      }
+      return { nodes, edges };
+    }
+
+    function App() {
+      const [majorName, setMajorName] = useState('Computer Science');
+      const [year, setYear] = useState('2024-2025');
+      const [limit, setLimit] = useState(5);
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+
+      const fetchRoadmap = useCallback(async () => {
+        setLoading(true); setError('');
+        try {
+          const res = await fetch('/api/smartplanner/planner/build', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ majorName, year, limit })
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || 'Failed to build roadmap');
+          setData(json);
+        } catch (err) {
+          setError(err.message || 'Failed to load roadmap');
+        } finally {
+          setLoading(false);
+        }
+      }, [majorName, year, limit]);
+
+      useEffect(() => { fetchRoadmap(); }, []);
+      const flow = useMemo(() => data ? buildTierLayout(data) : { nodes: [], edges: [] }, [data]);
+
+      return React.createElement('div', { className: 'wrap' }, [
+        React.createElement('div', { className: 'hero' }, [
+          React.createElement('div', {}, [
+            React.createElement('div', { style: { fontSize: 12, opacity: .72, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' } }, 'Academics / Smart Planner'),
+            React.createElement('h1', { style: { margin: '6px 0 8px', fontSize: 36 } }, 'Smart Planner Test Page'),
+            React.createElement('div', { className: 'muted' }, 'Backend-hosted prototype page for roadmap generation and React Flow visualization.'),
+          ]),
+          React.createElement('div', {}, [
+            React.createElement('span', { className: 'pill' }, 'Route parity with Unicart'),
+            React.createElement('span', { className: 'pill' }, 'React Flow roadmap graph'),
+          ])
+        ]),
+        React.createElement('div', { className: 'grid' }, [
+          React.createElement('div', { className: 'card stack' }, [
+            React.createElement('div', {}, [
+              React.createElement('label', {}, 'Major name'),
+              React.createElement('input', { value: majorName, onChange: e => setMajorName(e.target.value), placeholder: 'Computer Science' })
+            ]),
+            React.createElement('div', {}, [
+              React.createElement('label', {}, 'Catalog year'),
+              React.createElement('input', { value: year, onChange: e => setYear(e.target.value), placeholder: '2024-2025' })
+            ]),
+            React.createElement('div', {}, [
+              React.createElement('label', {}, 'Suggestion limit'),
+              React.createElement('input', { type: 'number', min: 1, max: 20, value: limit, onChange: e => setLimit(Number(e.target.value || 5)) })
+            ]),
+            React.createElement('div', { className: 'row' }, [
+              React.createElement('button', { onClick: fetchRoadmap, disabled: loading }, loading ? 'Building...' : 'Build roadmap'),
+              React.createElement('button', { className: 'secondary', onClick: () => setData(null) }, 'Clear')
+            ]),
+            error ? React.createElement('div', { className: 'card', style: { background: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.35)' } }, error) : null,
+            data ? React.createElement('div', { className: 'card', style: { background: 'rgba(255,255,255,0.06)' } }, [
+              React.createElement('div', { style: { fontWeight: 800, marginBottom: 8 } }, data.majorName),
+              React.createElement('div', { className: 'muted' }, `Catalog: ${data.catalogYear}`),
+              React.createElement('div', { className: 'muted' }, `Roadmap: ${data.matchedRoadmap?.title || 'n/a'}`),
+              React.createElement('div', { className: 'muted' }, `Courses: ${data.nodes?.length || 0} · Links: ${data.edges?.length || 0}`),
+            ]) : null
+          ]),
+          React.createElement('div', { className: 'card flowbox' }, [
+            React.createElement(ReactFlow, {
+              nodes: flow.nodes,
+              edges: flow.edges,
+              fitView: true,
+              minZoom: 0.2,
+              maxZoom: 1.5,
+              defaultEdgeOptions: { zIndex: 3 }
+            }, [
+              React.createElement(Background, { gap: 24, size: 1 }),
+              React.createElement(MiniMap, { pannable: true, zoomable: true }),
+              React.createElement(Controls, {})
+            ])
+          ])
+        ])
+      ])
+    }
+
+    createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+</body>
+</html>

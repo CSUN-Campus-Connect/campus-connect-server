@@ -3,6 +3,7 @@ import userRoutes from "./modules/auth/auth.routes";
 import eventRoutes from "./modules/event/event.routes";
 import marketplaceRoutes from "./modules/marketplace/marketplace.routes";
 import { errorHandler } from "./middleware/errorHandler";
+import { academicsRoutes } from "./modules/academics/academics.routes";
 import logger from "./utils/logger";
 import postsRoutes from "./modules/posts/posts.routes";
 import livestreamRoutes from "./modules/livestream/livestream.routes";
@@ -65,6 +66,7 @@ app.post(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true}));
 app.use(hppProtection);
+app.use("/", academicsRoutes());
 
 app.use((req, res, next) => {
   const start = Date.now();

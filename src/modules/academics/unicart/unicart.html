@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UniCart — CSUN Course Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --red:    #A80532;
+      --red2:   #7d0325;
+      --red-bg: rgba(168,5,50,.07);
+      --gold:   #d4a017;
+      --bg:     #f5f4f0;
+      --panel:  #ffffff;
+      --border: rgba(0,0,0,.09);
+      --text:   #14121f;
+      --muted:  rgba(20,18,31,.48);
+      --online: #1d5cc8;
+      --green:  #15803d;
+      --warn:   #b45309;
+      --radius: 14px;
+      --shadow: 0 2px 18px rgba(0,0,0,.08);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{font-size:15px;background:var(--bg);color:var(--text)}
+    body{font-family:"DM Sans",sans-serif;min-height:100vh;display:flex;flex-direction:column}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:#f0ede8}
+    ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:99px}
+
+    /* ── Nav ── */
+    nav{background:#fff;border-bottom:1.5px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 24px;height:54px;position:sticky;top:0;z-index:100;box-shadow:0 1px 12px rgba(0,0,0,.06)}
+    .nav-logo{font-family:"Syne",sans-serif;font-weight:800;font-size:1.25rem;color:var(--red);letter-spacing:-.5px}
+    .nav-logo span{color:var(--text);font-weight:400}
+    .nav-badge{font-family:"JetBrains Mono",monospace;font-size:.65rem;background:var(--red-bg);color:var(--red);border:1px solid rgba(168,5,50,.2);padding:2px 7px;border-radius:999px;font-weight:600;letter-spacing:.5px}
+    .nav-right{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:.82rem;font-weight:500}
+    .nav-right select{font-family:"DM Sans",sans-serif;font-size:.82rem;font-weight:600;border:1.5px solid var(--border);border-radius:8px;padding:4px 10px;background:#fff;color:var(--text);cursor:pointer;outline:none}
+    .nav-right select:focus{border-color:var(--red)}
+
+    /* ── Status bar ── */
+    #statusBar{background:#fff;border-bottom:1px solid var(--border);padding:7px 20px;font-size:.73rem;display:flex;align-items:center;gap:10px;font-family:"JetBrains Mono",monospace;color:var(--muted);transition:.3s;min-height:32px}
+    #statusBar.active{background:#fffbeb;border-color:#fde68a;color:#92400e}
+    #statusBar.done{background:#f0fdf4;border-color:#bbf7d0;color:#14532d}
+    #statusBar.error{background:#fef2f2;border-color:#fecdd3;color:#991b1b}
+    .s-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+    #statusBar.active .s-dot{background:#f59e0b;animation:pulse .8s ease-in-out infinite}
+    #statusBar.done .s-dot{background:#22c55e}
+    #statusBar.error .s-dot{background:#ef4444}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+    /* ── Layout ── */
+    .app{display:grid;grid-template-columns:1fr 340px;gap:0;flex:1;min-height:0;overflow:hidden}
+    @media(max-width:960px){.app{grid-template-columns:1fr;overflow:visible}}
+    .left{display:flex;flex-direction:column;border-right:1.5px solid var(--border);min-height:0;overflow:hidden}
+
+    /* ── Search bar ── */
+    .search-bar{padding:14px 20px;border-bottom:1.5px solid var(--border);background:#fff;display:flex;gap:10px;flex-wrap:wrap}
+    .search-input-wrap{flex:1;min-width:220px;position:relative}
+    .search-input-wrap input{width:100%;font-family:"DM Sans",sans-serif;font-size:.9rem;padding:9px 14px 9px 38px;border:1.5px solid var(--border);border-radius:10px;outline:none;background:#fafafa;color:var(--text);transition:.15s}
+    .search-input-wrap input:focus{border-color:var(--red);background:#fff;box-shadow:0 0 0 3px rgba(168,5,50,.08)}
+    .search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:1rem;opacity:.4}
+    .filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%}
+    .filter-row select{font-family:"DM Sans",sans-serif;font-size:.78rem;font-weight:500;border:1.5px solid var(--border);border-radius:8px;padding:5px 10px;background:#fff;color:var(--text);cursor:pointer;outline:none;min-width:100px}
+    .filter-row select:focus{border-color:var(--red)}
+    .btn-search{font-family:"Syne",sans-serif;font-weight:700;font-size:.82rem;background:var(--red);color:#fff;border:none;border-radius:10px;padding:8px 18px;cursor:pointer;transition:.15s;white-space:nowrap;letter-spacing:.3px}
+    .btn-search:hover{background:var(--red2)}
+    .btn-search:disabled{background:#ccc;cursor:not-allowed}
+    .tag-strip{width:100%;display:flex;gap:6px;flex-wrap:wrap;padding:2px 0 2px}
+    .tag-chip{font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:999px;cursor:pointer;border:1.5px solid transparent;transition:.12s;background:rgba(0,0,0,.05);color:rgba(0,0,0,.55)}
+    .tag-chip.active{background:var(--red);color:#fff;border-color:var(--red)}
+    .tag-chip:hover:not(.active){background:rgba(0,0,0,.09)}
+
+    /* ── Results area ── */
+    .results-header{padding:9px 20px;font-family:"Syne",sans-serif;font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;background:#fafafa;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+    .result-count{font-family:"JetBrains Mono",monospace;font-size:.7rem;font-weight:600;background:var(--red-bg);color:var(--red);padding:2px 8px;border-radius:999px}
+    .results-list{overflow-y:auto;flex:1;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+    .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:10px;opacity:.5;padding:40px;text-align:center}
+    .empty-icon{font-size:2.5rem}
+    .empty-text{font-family:"Syne",sans-serif;font-weight:700;font-size:.95rem}
+    .empty-sub{font-size:.8rem;color:var(--muted);line-height:1.6}
+
+    /* ── Course group header (groups sections by course) ── */
+    .course-group{display:flex;flex-direction:column;gap:6px}
+    .course-group-head{padding:8px 12px;background:linear-gradient(135deg,var(--red-bg),rgba(168,5,50,.03));border:1px solid rgba(168,5,50,.12);border-radius:10px;display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+    .cg-id{font-family:"Syne",sans-serif;font-weight:800;font-size:.9rem;color:var(--red)}
+    .cg-title{font-family:"Syne",sans-serif;font-weight:700;font-size:.88rem;line-height:1.3}
+    .cg-meta{font-size:.73rem;color:var(--muted);margin-top:1px;line-height:1.4}
+    .cg-desc{font-size:.7rem;color:var(--muted);margin-top:3px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .cg-prereq{font-size:.67rem;color:var(--warn);margin-top:2px}
+
+    /* ── Section card ── */
+    .class-card{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:.18s;cursor:default}
+    .class-card:hover{box-shadow:var(--shadow);border-color:rgba(168,5,50,.18);transform:translateY(-1px)}
+    .class-card.conflict{border-color:#fca5a5;background:#fff9f9}
+    .class-card.in-cart{border-color:#86efac;background:#f6fef9}
+    .card-accent{height:3px;background:linear-gradient(90deg,var(--red),#f87171)}
+    .class-card.in-cart .card-accent{background:linear-gradient(90deg,var(--green),#86efac)}
+    .class-card.conflict .card-accent{background:linear-gradient(90deg,#dc2626,#fca5a5)}
+    .card-body{padding:11px 14px}
+    .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+    .card-info{flex:1;min-width:0}
+    .card-title-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+    .card-course-id{font-family:"Syne",sans-serif;font-weight:800;font-size:.88rem;color:var(--red)}
+    .chip{display:inline-flex;align-items:center;font-size:.58rem;font-weight:700;padding:1px 6px;border-radius:999px;line-height:1.6}
+    .chip-units{background:var(--red-bg);color:var(--red)}
+    .chip-online{background:#eff6ff;color:#1d5cc8}
+    .chip-type{background:rgba(0,0,0,.05);color:rgba(0,0,0,.55)}
+    .section-id-chip{font-family:"JetBrains Mono",monospace;font-size:.62rem;font-weight:600;background:rgba(0,0,0,.05);color:rgba(0,0,0,.45);padding:1px 6px;border-radius:5px}
+    .card-meta{display:flex;flex-direction:column;gap:2px}
+    .meta-row{display:flex;align-items:center;gap:5px;font-size:.72rem;color:rgba(0,0,0,.52)}
+    .conflict-banner{margin-top:6px;padding:4px 8px;border-radius:7px;background:#fef2f2;border:1px solid #fecdd3;font-size:.67rem;font-weight:800;color:#dc2626;display:flex;align-items:center;gap:5px}
+    .card-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+    .btn-add{font-family:"Syne",sans-serif;font-weight:800;font-size:.74rem;background:var(--red);color:#fff;border:none;border-radius:9px;padding:6px 14px;cursor:pointer;transition:.15s}
+    .btn-add:hover{background:var(--red2)}
+    .in-cart-badge{font-size:.68rem;font-weight:900;color:var(--green);background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:3px 8px;display:flex;align-items:center;gap:4px}
+    .no-sections{font-size:.73rem;color:var(--muted);padding:8px 12px;font-style:italic}
+
+    /* ── Right panel ── */
+    .right{display:flex;flex-direction:column;background:#fafafa;min-height:0;overflow:hidden}
+    .cart-header{padding:12px 18px;background:#fff;border-bottom:1.5px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+    .cart-title{font-family:"Syne",sans-serif;font-weight:800;font-size:1rem;letter-spacing:-.3px}
+    .cart-count-badge{font-family:"JetBrains Mono",monospace;font-size:.68rem;font-weight:700;background:var(--red-bg);color:var(--red);border-radius:999px;padding:2px 8px}
+    .cart-units-badge{font-family:"JetBrains Mono",monospace;font-size:.68rem;font-weight:700;background:rgba(0,0,0,.06);color:var(--muted);border-radius:999px;padding:2px 8px;margin-left:auto}
+    .cart-section-label{font-family:"Syne",sans-serif;font-size:.68rem;font-weight:800;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;padding:7px 18px 5px;border-bottom:1px solid var(--border);background:#fafafa;flex-shrink:0}
+    .cart-list{padding:10px 12px;display:flex;flex-direction:column;gap:7px;overflow-y:auto;max-height:260px;flex-shrink:0}
+    .cart-empty{padding:18px;text-align:center;font-size:.8rem;color:var(--muted);font-family:"Syne",sans-serif;font-weight:600}
+    .cart-item{background:#fff;border:1.5px solid var(--border);border-radius:11px;overflow:hidden;display:flex;transition:.15s}
+    .cart-item:hover{box-shadow:0 2px 10px rgba(0,0,0,.07);border-color:rgba(0,0,0,.12)}
+    .cart-item.conflict-item{border-color:#fca5a5;background:#fff9f9}
+    .cart-stripe{width:4px;flex-shrink:0}
+    .cart-item-body{flex:1;padding:8px 9px}
+    .cart-item-top{display:flex;justify-content:space-between;align-items:flex-start}
+    .cart-item-id{font-family:"Syne",sans-serif;font-weight:900;font-size:.8rem}
+    .cart-item-name{font-weight:700;font-size:.74rem;line-height:1.25;margin:1px 0 2px}
+    .cart-item-detail{font-size:.66rem;color:var(--muted)}
+    .cart-item-time{display:flex;align-items:center;gap:4px;font-size:.66rem;color:rgba(0,0,0,.5);margin-top:2px}
+    .cart-item-conflict{font-size:.63rem;font-weight:800;color:#dc2626;margin-top:2px}
+    .btn-remove{background:none;border:none;cursor:pointer;color:rgba(0,0,0,.3);font-size:.9rem;padding:2px;border-radius:5px;transition:.12s}
+    .btn-remove:hover{color:#dc2626;background:#fef2f2}
+
+    /* ── Weekly schedule grid ── */
+    .schedule-section{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+    .schedule-toolbar{padding:7px 18px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0}
+    .schedule-label{font-family:"Syne",sans-serif;font-size:.72rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-right:auto}
+    .btn-export{font-family:"Syne",sans-serif;font-weight:700;font-size:.72rem;border:1.5px solid var(--border);background:#fff;color:var(--text);border-radius:8px;padding:5px 11px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:5px}
+    .btn-export:hover{border-color:var(--red);color:var(--red)}
+    .btn-conflict{border-color:#fca5a5 !important;color:#dc2626 !important;font-weight:800}
+    .grid-wrap{flex:1;overflow:auto;padding:10px 10px 10px 8px}
+    .grid{min-width:420px}
+    .grid-head{display:grid;grid-template-columns:42px repeat(5,1fr);margin-bottom:3px}
+    .grid-day-hdr{text-align:center;padding:5px 2px;border-radius:6px 6px 0 0;font-family:"Syne",sans-serif;font-size:.63rem;font-weight:900;color:var(--red);letter-spacing:.8px;text-transform:uppercase;background:var(--red-bg)}
+    .grid-row{display:grid;grid-template-columns:42px repeat(5,1fr);min-height:44px;border-top:1px solid rgba(0,0,0,.05)}
+    .grid-time{font-family:"JetBrains Mono",monospace;font-size:.57rem;color:rgba(0,0,0,.32);text-align:right;padding-right:5px;padding-top:3px;font-weight:600}
+    .grid-cell{position:relative;border-left:1px solid rgba(0,0,0,.04);margin:0 2px}
+    .grid-block{position:absolute;left:2px;right:2px;border-radius:0 6px 6px 0;display:flex;flex-direction:column;justify-content:flex-start;overflow:hidden;padding:2px 4px;z-index:1;cursor:default}
+    .grid-block.has-conflict{outline:2px solid #dc2626;outline-offset:-1px;animation:conflictPulse 1.5s ease-in-out infinite}
+    @keyframes conflictPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 3px rgba(220,38,38,0)}}
+    .grid-block-title{font-family:"Syne",sans-serif;font-size:.53rem;font-weight:900;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+    .grid-block-loc{font-size:.47rem;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.75}
+    .grid-legend{display:flex;flex-wrap:wrap;gap:7px;padding:7px 10px;border-top:1px solid var(--border)}
+    .legend-item{display:flex;align-items:center;gap:4px;font-size:.63rem;color:rgba(0,0,0,.52);font-weight:700}
+    .legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+    .online-strip{margin:6px 10px;padding:6px 10px;background:rgba(29,92,200,.06);border-radius:8px;border:1px solid rgba(29,92,200,.15)}
+    .online-strip-title{font-family:"Syne",sans-serif;font-size:.65rem;font-weight:800;color:#1d5cc8;margin-bottom:4px}
+    .online-chips{display:flex;flex-wrap:wrap;gap:5px}
+
+    /* ── Spinner ── */
+    .spinner{width:14px;height:14px;border:2.5px solid rgba(168,5,50,.2);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── Toast ── */
+    #toast{position:fixed;bottom:22px;right:22px;font-family:"Syne",sans-serif;font-size:.82rem;font-weight:700;background:var(--text);color:#fff;padding:9px 18px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.25);z-index:999;opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;max-width:320px;text-align:center}
+    #toast.show{opacity:1;transform:translateY(0)}
+    #toast.warn{background:#b45309}
+    #toast.error{background:#dc2626}
+
+    /* ── Modal ── */
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center}
+    .modal-overlay.open{display:flex}
+    .modal{background:#fff;border-radius:16px;padding:26px 30px;max-width:380px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.2)}
+    .modal h2{font-family:"Syne",sans-serif;font-weight:800;font-size:1rem;margin-bottom:14px}
+    .modal-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+    .modal-btn{font-family:"Syne",sans-serif;font-weight:700;font-size:.8rem;border:1.5px solid var(--border);background:#fff;color:var(--text);border-radius:9px;padding:7px 14px;cursor:pointer;transition:.15s;flex:1}
+    .modal-btn:hover{border-color:var(--red);color:var(--red)}
+    .modal-btn.primary{background:var(--red);color:#fff;border-color:var(--red)}
+    .modal-btn.primary:hover{background:var(--red2)}
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">Uni<span>Cart</span></span>
+  <span class="nav-badge">CSUN</span>
+  <div class="nav-right">
+    <span style="font-size:.78rem;color:var(--muted)">Semester:</span>
+    <select id="semesterSelect" onchange="onSemesterChange()"><option>Loading…</option></select>
+  </div>
+</nav>
+
+<div id="statusBar">
+  <div class="s-dot"></div>
+  <span id="statusMsg">Ready — search by dept (e.g. COMP) or course (e.g. COMP 440). Live data from catalog.csun.edu</span>
+</div>
+
+<div class="app">
+  <!-- LEFT: Search + Results -->
+  <div class="left">
+    <div class="search-bar">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input id="searchInput" type="text" placeholder='e.g. "COMP", "COMP 440", "CIT 101"' />
+      </div>
+      <button class="btn-search" id="searchBtn" onclick="doSearch()">Search</button>
+      <div class="filter-row">
+        <select id="deptFilter">
+          <option value="">All Depts</option>
+        </select>
+        <select id="levelFilter">
+          <option value="">All Levels</option>
+          <option value="100s">100s</option>
+          <option value="200s">200s</option>
+          <option value="300s">300s</option>
+          <option value="400s">400s</option>
+          <option value="500s+">500s+</option>
+        </select>
+        <select id="formatFilter">
+          <option value="">Any Format</option>
+          <option value="online">Online</option>
+          <option value="in-person">In-Person</option>
+        </select>
+      </div>
+      <div class="tag-strip" id="tagStrip"></div>
+    </div>
+
+    <div class="results-header">
+      <span>Sections</span>
+      <span class="result-count" id="resultCount">—</span>
+      <span id="loadingSpinner" style="display:none"><span class="spinner"></span></span>
+    </div>
+    <div class="results-list" id="resultsList">
+      <div class="empty-state">
+        <div class="empty-icon">🎓</div>
+        <div class="empty-text">Search for classes to start</div>
+        <div class="empty-sub">
+          Try <strong>COMP</strong>, <strong>COMP 440</strong>, or pick a department<br><br>
+          Data scraped live from <strong style="color:var(--red);opacity:1">catalog.csun.edu</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Cart + Schedule -->
+  <div class="right">
+    <div class="cart-header">
+      <span class="cart-title">My Cart</span>
+      <span class="cart-count-badge" id="cartCount">0 classes</span>
+      <span class="cart-units-badge" id="cartUnits">0 units</span>
+    </div>
+    <div class="cart-section-label">Enrolled Sections</div>
+    <div class="cart-list" id="cartList">
+      <div class="cart-empty">No classes added yet</div>
+    </div>
+
+    <div class="schedule-section">
+      <div class="schedule-toolbar">
+        <span class="schedule-label">Weekly Schedule</span>
+        <button class="btn-export btn-conflict" id="conflictBtn" onclick="showConflicts()" style="display:none">⚠ Conflicts</button>
+        <button class="btn-export" onclick="openExport()">⬇ Export</button>
+        <button class="btn-export" onclick="printSchedule()">🖨 Print</button>
+      </div>
+      <div class="grid-wrap" id="gridWrap">
+        <div class="empty-state" style="height:160px;opacity:.4">
+          <div class="empty-icon">📅</div>
+          <div class="empty-text" style="font-size:.82rem">Add classes to build your schedule</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="modal-overlay" id="exportModal" onclick="if(event.target===this)closeExport()">
+  <div class="modal">
+    <h2>Export Schedule</h2>
+    <p style="font-size:.8rem;color:var(--muted);line-height:1.5">Export your schedule for the selected semester.</p>
+    <div class="modal-btns">
+      <button class="modal-btn primary" onclick="exportICS()">📅 .ics File</button>
+      <button class="modal-btn" onclick="exportJSON()">📄 Copy JSON</button>
+      <button class="modal-btn" onclick="closeExport()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════════
+const API = "/api/academics";
+const PALETTE = ["#A80532","#1d5cc8","#b45309","#15803d","#6d28d9","#0e7490","#c2410c","#334155","#9d174d","#065f46"];
+const DAYS_ORDER = ["Mon","Tue","Wed","Thu","Fri"];
+const QUICK_TAGS = ["COMP","MATH","ENGL","PHYS","BIOL","PSYC","Online","In-Person"];
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+let cart       = [];          // flat list of section objects in cart
+let results    = [];          // current grouped result [{course, sections[]}]
+let activeTag  = "";
+let conflictMap = {};
+let searching  = false;
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+(async function init() {
+  await Promise.all([loadSemesters(), loadDepts()]);
+  buildTags();
+  document.getElementById("searchInput").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+  document.getElementById("deptFilter").addEventListener("change", () => doSearch());
+  document.getElementById("levelFilter").addEventListener("change", () => refilterResults());
+  document.getElementById("formatFilter").addEventListener("change", () => refilterResults());
+  document.getElementById("exportModal").addEventListener("click", e => { if (e.target === document.getElementById("exportModal")) closeExport(); });
+})();
+
+async function loadSemesters() {
+  try {
+    const j = await (await fetch(`${API}/semesters`)).json();
+    const sems = j.data ?? ["Spring 2026","Fall 2025","Fall 2026","Summer 2026"];
+    const sel = document.getElementById("semesterSelect");
+    sel.innerHTML = sems.map(s => `<option value="${s}">${s}</option>`).join("");
+  } catch { /* keep default */ }
+}
+
+async function loadDepts() {
+  try {
+    const j = await (await fetch(`${API}/departments`)).json();
+    const depts = j.data ?? [];
+    const sel = document.getElementById("deptFilter");
+    sel.innerHTML = `<option value="">All Depts</option>` +
+      depts.map(d => `<option value="${(d.code||d).toUpperCase()}">${(d.code||d).toUpperCase()} – ${d.label||""}</option>`).join("");
+  } catch { /* non-fatal */ }
+}
+
+function buildTags() {
+  document.getElementById("tagStrip").innerHTML = QUICK_TAGS.map(t =>
+    `<span class="tag-chip${activeTag===t?" active":""}" onclick="setTag('${t}')">${t}</span>`
+  ).join("");
+}
+
+function setTag(tag) {
+  activeTag = activeTag === tag ? "" : tag;
+  buildTags();
+  doSearch();
+}
+
+function onSemesterChange() {
+  if (results.length) doSearch();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SEARCH — calls backend which scrapes catalog.csun.edu directly
+// ═══════════════════════════════════════════════════════════════════
+async function doSearch() {
+  if (searching) return;
+
+  const rawSearch = document.getElementById("searchInput").value.trim();
+  const deptSel   = document.getElementById("deptFilter").value;
+  const semester  = document.getElementById("semesterSelect").value;
+
+  // Determine dept from input, dept dropdown, or active tag
+  let dept = deptSel;
+  let courseSearch = rawSearch;
+
+  if (!dept) {
+    // Try to extract dept from search string like "COMP 440" or just "COMP"
+    const m = rawSearch.match(/^([A-Za-z]{2,6})\s*(\d*[A-Za-z]*)$/i);
+    if (m) {
+      dept = m[1].toUpperCase();
+      courseSearch = m[2] || "";
+    }
+  }
+
+  // Active tag shortcuts
+  if (!dept && activeTag && !["Online","In-Person"].includes(activeTag)) {
+    dept = activeTag;
+    courseSearch = "";
+  }
+
+  if (!dept) {
+    setStatus("error", "Please enter a department (e.g. COMP) or select one from the dropdown");
+    return;
+  }
+
+  searching = true;
+  setLoading(true);
+  setStatus("active", `Fetching ${dept}${courseSearch ? " " + courseSearch.toUpperCase() : ""} courses from catalog.csun.edu…`);
+
+  try {
+    const params = new URLSearchParams({
+      subject:  dept,
+      semester,
+      limit:    courseSearch ? "5" : "30",
+    });
+    if (courseSearch) params.set("search", courseSearch);
+    if (activeTag === "Online")    params.set("isOnline", "true");
+    if (activeTag === "In-Person") params.set("isOnline", "false");
+
+    const res = await fetch(`${API}/sections?${params}`);
+    const j   = await res.json();
+    if (!res.ok) throw new Error(j.error || res.statusText);
+
+    // Group flat sections by course
+    const grouped = groupByCourse(j.data ?? []);
+    results = grouped;
+
+    setStatus("done", `✓ Loaded ${j.total} section(s) across ${grouped.length} course(s) from catalog.csun.edu`);
+    renderResults();
+    document.getElementById("resultCount").textContent =
+      `${j.total}${grouped.length > 1 ? ` (${grouped.length} courses)` : ""}`;
+
+  } catch (err) {
+    setStatus("error", "Search failed: " + err.message);
+    toast("Search failed: " + err.message, "error");
+  } finally {
+    searching = false;
+    setLoading(false);
+  }
+}
+
+function groupByCourse(sections) {
+  const map = new Map();
+  for (const s of sections) {
+    const key = s.courseId || `${s.subject}-${s.number}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        courseKey:    key,
+        subject:      s.subject,
+        number:       s.number,
+        title:        s.title,
+        units:        s.units,
+        description:  s.description || "",
+        prerequisites:Array.isArray(s.prerequisites) ? s.prerequisites.join(", ") : (s.prerequisites||""),
+        tags:         s.tags || [],
+        sections:     [],
+      });
+    }
+    map.get(key).sections.push(s);
+  }
+  return Array.from(map.values());
+}
+
+// Local re-filter (format/level) without re-fetching
+function refilterResults() {
+  renderResults();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER RESULTS
+// ═══════════════════════════════════════════════════════════════════
+function renderResults() {
+  const list     = document.getElementById("resultsList");
+  const levelF   = document.getElementById("levelFilter").value;
+  const formatF  = document.getElementById("formatFilter").value;
+
+  if (!results.length) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">No results found</div><div class="empty-sub">Try a different search or semester</div></div>`;
+    return;
+  }
+
+  let html = "";
+  let shownSections = 0;
+
+  for (const course of results) {
+    // Filter sections
+    let secs = course.sections;
+    if (formatF === "online")    secs = secs.filter(s => s.isOnline);
+    if (formatF === "in-person") secs = secs.filter(s => !s.isOnline);
+    if (levelF && !course.tags.includes(levelF)) continue;
+
+    shownSections += secs.length;
+
+    html += `<div class="course-group">
+      <div class="course-group-head">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="cg-id">${course.subject} ${course.number}</span>
+            <span class="chip chip-units">${course.units} units</span>
+            ${course.tags.includes("Upper Division") ? '<span class="chip" style="background:rgba(109,40,217,.08);color:#6d28d9">Upper Div</span>' : ""}
+          </div>
+          <div class="cg-title">${esc(course.title)}</div>
+          ${course.description ? `<div class="cg-desc">${esc(course.description)}</div>` : ""}
+          ${course.prerequisites ? `<div class="cg-prereq">Prerequisites: ${esc(course.prerequisites)}</div>` : ""}
+        </div>
+        <div class="cg-meta">${secs.length} section${secs.length!==1?"s":""}</div>
+      </div>
+      ${secs.length ? secs.map(s => sectionCard(course, s)).join("") : `<div class="no-sections">No sections available for this semester</div>`}
+    </div>`;
+  }
+
+  list.innerHTML = html || `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">No sections match filters</div></div>`;
+  document.getElementById("resultCount").textContent = `${shownSections}`;
+}
+
+function sectionCard(course, s) {
+  const uid = cardUid(s);
+  const inCart = cart.some(c => cardUid(c) === uid);
+  const conflictKey = `${s.subject} ${s.number}`;
+  const hasConflict = inCart && (conflictMap[conflictKey]?.length ?? 0) > 0;
+
+  const dayLabel = Array.isArray(s.days) && s.days.length ? (s.days||[]).join("/") : (s.rawDays || "TBA");
+  const timeLabel = s.startTime && s.endTime
+    ? `${fmt12(s.startTime)}–${fmt12(s.endTime)}`
+    : (s.rawTime || "TBA");
+  const timeStr = s.isOnline
+    ? "Online / Async"
+    : `${dayLabel} · ${timeLabel}`;
+  const locationLabel = s.isOnline
+    ? (s.location && s.location !== "TBA" ? s.location : "Remote / Async")
+    : (s.location || "TBA");
+  const locStr = `📍 ${locationLabel}`;
+
+  return `<div class="class-card${hasConflict?" conflict":inCart?" in-cart":""}" id="card-${uid}">
+    <div class="card-accent"></div>
+    <div class="card-body">
+      <div class="card-top">
+        <div class="card-info">
+          <div class="card-title-row">
+            <span class="card-course-id">${s.subject} ${s.number}</span>
+            ${s.isOnline ? '<span class="chip chip-online">Online</span>' : ""}
+            <span class="section-id-chip">§${s.sectionId}</span>
+          </div>
+          <div class="card-meta">
+            <div class="meta-row">🕐 ${timeStr}</div>
+            ${locStr ? `<div class="meta-row">${locStr}</div>` : ""}
+          </div>
+          ${hasConflict ? `<div class="conflict-banner">⚠ Conflicts with: ${conflictMap[conflictKey].join(", ")}</div>` : ""}
+        </div>
+        <div class="card-actions">
+          ${inCart
+            ? `<div class="in-cart-badge">✓ In Cart</div>`
+            : `<button class="btn-add" onclick="addToCart(${JSON.stringify(course).replace(/"/g,"&quot;")}, ${JSON.stringify(s).replace(/"/g,"&quot;")})">+ ADD</button>`
+          }
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function cardUid(s) {
+  return `${s.semester||""}-${s.courseId||s.subject+"-"+s.number}-${s.sectionId}`.replace(/[^a-zA-Z0-9\-]/g,"-");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CART
+// ═══════════════════════════════════════════════════════════════════
+function addToCart(course, section) {
+  const uid = cardUid(section);
+  if (cart.some(c => cardUid(c) === uid)) return;
+  // Replace any other section of the same course (one section per course rule)
+  cart = cart.filter(c => !(c.subject === section.subject && c.number === section.number));
+  cart.push({ ...section, _courseTitle: course.title, _courseUnits: course.units });
+  recalcConflicts();
+  renderCart();
+  renderSchedule();
+  renderResults();
+  toast(`${section.subject} ${section.number} §${section.sectionId} added`);
+}
+
+function removeFromCart(uid) {
+  const s = cart.find(c => cardUid(c) === uid);
+  cart = cart.filter(c => cardUid(c) !== uid);
+  recalcConflicts();
+  renderCart();
+  renderSchedule();
+  renderResults();
+  if (s) toast(`${s.subject} ${s.number} removed`);
+}
+
+function renderCart() {
+  const totalUnits = cart.reduce((acc, s) => acc + (s.units || s._courseUnits || 0), 0);
+  document.getElementById("cartCount").textContent = `${cart.length} class${cart.length !== 1 ? "es" : ""}`;
+  document.getElementById("cartUnits").textContent = `${totalUnits} unit${totalUnits !== 1 ? "s" : ""}`;
+
+  if (!cart.length) {
+    document.getElementById("cartList").innerHTML = `<div class="cart-empty">No classes added yet</div>`;
+    return;
+  }
+
+  document.getElementById("cartList").innerHTML = cart.map((s, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    const uid   = cardUid(s);
+    const key   = `${s.subject} ${s.number}`;
+    const hasConflict = (conflictMap[key]?.length ?? 0) > 0;
+    const dayLabel = Array.isArray(s.days) && s.days.length ? (s.days||[]).join("/") : (s.rawDays || "TBA");
+    const timeLabel = s.startTime && s.endTime
+      ? `${fmt12(s.startTime)}–${fmt12(s.endTime)}`
+      : (s.rawTime || "TBA");
+    const timeStr = s.isOnline ? "🌐 Online/Async"
+      : `${dayLabel} · ${timeLabel}`;
+
+    return `<div class="cart-item${hasConflict ? " conflict-item" : ""}">
+      <div class="cart-stripe" style="background:${color}"></div>
+      <div class="cart-item-body">
+        <div class="cart-item-top">
+          <div style="flex:1;min-width:0">
+            <div class="cart-item-id" style="color:${color}">${s.subject} ${s.number}</div>
+            <div class="cart-item-name">${esc(s.title || s._courseTitle || "")}</div>
+            <div class="cart-item-detail">§${s.sectionId}${s.location && !s.isOnline ? " · " + s.location : ""}</div>
+            <div class="cart-item-time">🕐 ${timeStr}</div>
+            ${hasConflict ? `<div class="cart-item-conflict">⚠ Conflicts with: ${conflictMap[key].join(", ")}</div>` : ""}
+          </div>
+          <button class="btn-remove" onclick="removeFromCart('${uid}')" title="Remove">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONFLICT DETECTION
+// ═══════════════════════════════════════════════════════════════════
+function recalcConflicts() {
+  conflictMap = {};
+  const ip = cart.filter(s => !s.isOnline && s.startTime && s.endTime);
+  for (let i = 0; i < ip.length; i++) {
+    for (let j = i + 1; j < ip.length; j++) {
+      const a = ip[i], b = ip[j];
+      const shared = (a.days||[]).filter(d => (b.days||[]).includes(d));
+      if (!shared.length) continue;
+      const [as, ae, bs, be] = [toMin(a.startTime), toMin(a.endTime), toMin(b.startTime), toMin(b.endTime)];
+      if (as < be && ae > bs) {
+        const ak = `${a.subject} ${a.number}`, bk = `${b.subject} ${b.number}`;
+        conflictMap[ak] = [...(conflictMap[ak]||[]), bk];
+        conflictMap[bk] = [...(conflictMap[bk]||[]), ak];
+      }
+    }
+  }
+  const n = Object.keys(conflictMap).length;
+  const btn = document.getElementById("conflictBtn");
+  if (n) {
+    btn.style.display = "flex";
+    btn.textContent = `⚠ ${n} Conflict${n > 1 ? "s" : ""}`;
+  } else {
+    btn.style.display = "none";
+  }
+}
+
+function showConflicts() {
+  const seen = new Set();
+  const pairs = [];
+  for (const [k, vs] of Object.entries(conflictMap)) {
+    for (const v of vs) {
+      const p = [k, v].sort().join("|");
+      if (!seen.has(p)) { seen.add(p); pairs.push(`${k} ↔ ${v}`); }
+    }
+  }
+  toast("Conflicts: " + pairs.join(", "), "warn");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WEEKLY SCHEDULE GRID
+// ═══════════════════════════════════════════════════════════════════
+function renderSchedule() {
+  const wrap = document.getElementById("gridWrap");
+  const ip   = cart.filter(s => !s.isOnline && s.startTime);
+  const online = cart.filter(s => s.isOnline);
+
+  if (!cart.length) {
+    wrap.innerHTML = `<div class="empty-state" style="height:160px;opacity:.4"><div class="empty-icon">📅</div><div class="empty-text" style="font-size:.82rem">Add classes to build your schedule</div></div>`;
+    return;
+  }
+
+  // Hour range
+  let minH = 7, maxH = 21;
+  if (ip.length) {
+    minH = Math.max(7, Math.min(...ip.map(s => Math.floor(toMin(s.startTime) / 60))) - 1);
+    maxH = Math.min(22, Math.max(...ip.map(s => Math.ceil(toMin(s.endTime)   / 60))) + 1);
+  }
+  const hours = [];
+  for (let h = minH; h < maxH; h++) hours.push(h);
+
+  const colorOf = s => PALETTE[cart.indexOf(s) % PALETTE.length];
+
+  let html = `<div class="grid">
+    <div class="grid-head">
+      <div></div>
+      ${DAYS_ORDER.map(d => `<div class="grid-day-hdr">${d}</div>`).join("")}
+    </div>`;
+
+  hours.forEach((hour, ri) => {
+    html += `<div class="grid-row" style="${ri % 2 === 0 ? "" : "background:rgba(0,0,0,.013)"}">
+      <div class="grid-time">${fmtH(hour)}</div>`;
+
+    DAYS_ORDER.forEach(day => {
+      html += `<div class="grid-cell">`;
+      ip.forEach(s => {
+        if (!(s.days || []).includes(day)) return;
+        const st = toMin(s.startTime), en = toMin(s.endTime);
+        if (st >= (hour + 1) * 60 || en <= hour * 60) return;
+        const bStart = Math.max(st, hour * 60);
+        const bEnd   = Math.min(en, (hour + 1) * 60);
+        const top    = ((bStart - hour * 60) / 60) * 100;
+        const height = ((bEnd - bStart) / 60) * 100;
+        const isFirst = bStart === st;
+        const color   = colorOf(s);
+        const key     = `${s.subject} ${s.number}`;
+        const conflict = (conflictMap[key]?.length ?? 0) > 0;
+        html += `<div class="grid-block${conflict ? " has-conflict" : ""}"
+          style="top:${top}%;height:${height}%;background:linear-gradient(135deg,${color}28,${color}15);border-left:3px solid ${color}"
+          title="${s.subject} ${s.number} §${s.sectionId}&#10;${fmt12(s.startTime)}–${fmt12(s.endTime)}&#10;${s.location||""}">`;
+        if (isFirst) {
+          html += `<div class="grid-block-title" style="color:${color}">${s.subject} ${s.number}</div>`;
+          if (bEnd - bStart >= 38) html += `<div class="grid-block-loc" style="color:${color}aa">${s.location || ""}</div>`;
+          if (bEnd - bStart >= 52) html += `<div class="grid-block-loc" style="color:${color}88">${fmt12(s.startTime)}</div>`;
+        }
+        html += `</div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div>`;
+  });
+  html += `</div>`;
+
+  if (online.length) {
+    html += `<div class="online-strip">
+      <div class="online-strip-title">ONLINE / ASYNC</div>
+      <div class="online-chips">
+        ${online.map(s => {
+          const c = colorOf(s);
+          return `<span style="font-size:.68rem;font-weight:700;padding:2px 9px;border-radius:999px;background:${c}15;color:${c};border:1px solid ${c}30">🌐 ${s.subject} ${s.number}</span>`;
+        }).join("")}
+      </div></div>`;
+  }
+
+  if (ip.length) {
+    html += `<div class="grid-legend">${ip.map(s => {
+      const c = colorOf(s);
+      return `<div class="legend-item"><div class="legend-dot" style="background:${c}"></div>${s.subject} ${s.number}</div>`;
+    }).join("")}</div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════
+function openExport() {
+  if (!cart.length) { toast("Add classes first!"); return; }
+  document.getElementById("exportModal").classList.add("open");
+}
+function closeExport() {
+  document.getElementById("exportModal").classList.remove("open");
+}
+
+async function exportICS() {
+  const semester = document.getElementById("semesterSelect").value;
+  try {
+    const res = await fetch(`${API}/export/ics`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sections: cart, semester }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${semester.replace(/\s+/g,"_")}_schedule.ics`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    closeExport();
+    toast("Schedule downloaded");
+  } catch (e) { toast("Export failed: " + e.message, "error"); }
+}
+
+function exportJSON() {
+  const data = JSON.stringify(cart, null, 2);
+  navigator.clipboard?.writeText(data).then(() => toast("JSON copied!")).catch(() => {
+    const a = document.createElement("a");
+    a.href = "data:application/json;charset=utf-8," + encodeURIComponent(data);
+    a.download = "unicart_schedule.json"; a.click();
+  });
+  closeExport();
+}
+
+function printSchedule() {
+  if (!cart.length) { toast("Add classes before printing!"); return; }
+  const sem = document.getElementById("semesterSelect").value;
+  const w = window.open("", "_blank");
+  const rows = cart.map((s, i) => {
+    const c = PALETTE[i % PALETTE.length];
+    const dayLabel = Array.isArray(s.days) && s.days.length ? (s.days||[]).join("/") : (s.rawDays || "TBA");
+    const timeLabel = s.startTime && s.endTime ? `${fmt12(s.startTime)}–${fmt12(s.endTime)}` : (s.rawTime || "TBA");
+    const t = s.isOnline ? "Online" : `${dayLabel} ${timeLabel}`;
+    return `<tr><td style="border-left:4px solid ${c};padding-left:8px">${s.subject} ${s.number}</td>
+      <td>${esc(s.title || s._courseTitle || "")}</td><td>${s.units||s._courseUnits||""}</td>
+      <td>${t}</td><td>${s.isOnline?"Online":s.location||"TBA"}</td><td>§${s.sectionId}</td></tr>`;
+  }).join("");
+  const total = cart.reduce((a,s)=>a+(s.units||s._courseUnits||0),0);
+  w.document.write(`<!DOCTYPE html><html><head><title>UniCart — ${sem}</title>
+    <style>body{font-family:sans-serif;padding:24px}h1{font-size:1.2rem;margin-bottom:4px}
+    p{font-size:.82rem;color:#666;margin-bottom:16px}table{border-collapse:collapse;width:100%;font-size:.8rem}
+    th{background:#A80532;color:#fff;padding:7px 10px;text-align:left}td{padding:6px 10px;border-bottom:1px solid #eee}
+    tr:nth-child(even){background:#fafafa}</style></head><body>
+    <h1>UniCart — ${sem}</h1><p><strong>${total} units</strong> · <strong>${cart.length} classes</strong></p>
+    <table><thead><tr><th>Course</th><th>Title</th><th>Units</th><th>Days/Time</th><th>Location</th><th>Section</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════════════
+function toMin(t) {
+  if (!t) return 0;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+function fmt12(t) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const ap = h >= 12 ? "pm" : "am";
+  const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${h12}:${String(m).padStart(2,"0")}${ap}`;
+}
+function fmtH(h) {
+  if (h > 12) return `${h-12}pm`;
+  if (h === 12) return "12pm";
+  return `${h}am`;
+}
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function setStatus(state, msg) {
+  const bar = document.getElementById("statusBar");
+  bar.className = state;
+  document.getElementById("statusMsg").textContent = msg;
+}
+function setLoading(on) {
+  document.getElementById("loadingSpinner").style.display = on ? "inline-flex" : "none";
+  document.getElementById("searchBtn").disabled = on;
+}
+
+let toastTimer;
+function toast(msg, type = "") {
+  const t = document.getElementById("toast");
+  clearTimeout(toastTimer);
+  t.textContent = msg;
+  t.className = `show${type ? " " + type : ""}`;
+  toastTimer = setTimeout(() => t.className = "", 3200);
+}
+</script>
+</body>
+</html>
