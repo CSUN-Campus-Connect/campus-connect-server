@@ -26,6 +26,14 @@ export const corsConfig = cors({
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
+    // Allow any extra origins injected via environment (comma-separated)
+    // e.g. ALLOWED_ORIGINS=https://your-app.vercel.app,https://staging.example.com
+    const envOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
+    if (envOrigins.includes(origin)) return callback(null, true);
+
     callback(new Error(`CORS: origin '${origin}' not allowed`));
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
