@@ -325,10 +325,41 @@ export async function fetchDeptCourses(dept: string): Promise<CourseListing[]> {
   const upper = dept.toUpperCase().trim();
   const url   = `${CATALOG}/academics/${slug}/courses/`;
 
-  const [html, curricMap] = await Promise.all([
-    fetchText(url),
-    fetchCurriculumMeta(slug, upper),
-  ]);
+  // fetchText throws if catalog.csun.edu is unreachable or blocks the request
+  // (common in Docker/server environments). Catch and fall back to empty list
+  // so the caller can still try the curriculum API directly.
+  let html = "";
+  try {
+    html = await fetchText(url);
+  } catch (err: any) {
+    logger.warn({ dept: upper, url, err: err.message }, "fetchDeptCourses: catalog HTML fetch failed, falling back to curriculum API only");
+  }
+
+  const curricMap = await fetchCurriculumMeta(slug, upper).catch(() => new Map());
+
+  if (!html) {
+    // No catalog HTML — build stubs from curriculum API metadata so sections
+    // can still be fetched via the API fallback in fetchCourseSections.
+    const stubs: CourseListing[] = [];
+    for (const [courseKey, meta] of curricMap) {
+      const [subj, ...rest] = courseKey.split("-");
+      const number = rest.join("-");
+      if (!subj || !number) continue;
+      stubs.push({
+        courseKey,
+        subject: subj,
+        number,
+        slug: courseKey.toLowerCase(),
+        title: `${subj} ${number}`,
+        units: meta.units,
+        description: meta.description,
+        prerequisites: meta.prerequisites,
+        url: `${CATALOG}/academics/${slug}/courses/${courseKey.toLowerCase()}/`,
+      });
+    }
+    logger.info({ dept: upper, count: stubs.length }, "fetchDeptCourses: built stubs from curriculum API");
+    return stubs;
+  }
 
   const courses = parseCourseListPage(html, slug, curricMap);
   logger.info({ dept: upper, count: courses.length, url }, "fetchDeptCourses done");
