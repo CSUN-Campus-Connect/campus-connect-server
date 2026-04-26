@@ -14,7 +14,9 @@ interface AuthenticatedSocket extends Socket {
 export const setupSocket = (httpServer: HttpServer): Server => {
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || "http://localhost:3000",
+      origin: process.env.CLIENT_URL
+        ? process.env.CLIENT_URL.split(",").map((o) => o.trim())
+        : "http://localhost:3000",
       methods: ["GET", "POST"],
       credentials: true,
     },
