@@ -13,8 +13,9 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:3001",
   // Docker Compose — frontend container calling backend container
   "http://frontend:3000",
-  // Add your production domain here when you deploy:
-  // "https://your-app.vercel.app",
+  // Production
+  "https://campusconnect.social",
+  "https://www.campusconnect.social",
 ];
 
 export const corsConfig = cors({
