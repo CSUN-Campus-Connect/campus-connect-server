@@ -5,7 +5,7 @@ export interface SRCEvent {
   title: string;
   description: string;
   location: string;
-  startTime: Date | null; // null = all-day
+  startTime: Date | null;
   endTime: Date | null;
   isAllDay: boolean;
   url: string;
@@ -18,18 +18,23 @@ export interface SRCEvent {
 }
 
 export interface SRCScheduleClass {
-  id: string;           // derived from UID
+  id: string;
   title: string;
   instructor: string | null;
   location: string;
-  day: string;          // e.g. "Monday"
-  startTime: string;    // e.g. "08:00"
-  endTime: string;      // e.g. "09:00"
+  day: string;
+  startTime: string;
+  endTime: string;
   category: SRCClassCategory;
   description: string;
+  shortDescription?: string;
   registrationUrl: string;
   imageUrl: string | null;
-  spots: number | null; // null = unlimited / unknown
+  spots: number | null;
+  kind?: "class" | "event";
+  isAllDay?: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export type SRCClassCategory =
@@ -41,35 +46,32 @@ export type SRCClassCategory =
   | "Special Event"
   | "Other";
 
-// What the frontend sends when a user clicks "Add to Calendar"
 export interface AddToCalendarDto {
-  eventUid: string;       // matches SRCEvent.uid
-  userEmail: string;      // send ICS attachment here
-  // Optional overrides (populated from event data by default)
+  eventUid: string;
+  userEmail: string;
   title?: string;
   description?: string;
   location?: string;
-  startTime?: string;     // ISO 8601
-  endTime?: string;       // ISO 8601
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface AddToCalendarResult {
   success: boolean;
   message: string;
-  icsDownloadUrl?: string; // presigned URL or data URI fallback
+  icsDownloadUrl?: string;
 }
 
-// What the frontend sends when saving a weekly class slot
 export interface SaveScheduleClassDto {
   classId: string;
   className: string;
-  dayOfWeek: number;    // 0 = Sunday … 6 = Saturday
-  startTime: string;    // "HH:mm"
+  dayOfWeek: number;
+  startTime: string;
   endTime: string;
   location: string;
   instructor: string | null;
   category: SRCClassCategory;
-  weekStart: string;    // ISO date of week's Sunday, e.g. "2026-04-27"
+  weekStart: string;
 }
 
 export interface SaveScheduleClassResult {
@@ -78,23 +80,20 @@ export interface SaveScheduleClassResult {
   userScheduleId?: string;
 }
 
-// Cached feed state stored in memory / Redis
 export interface SRCFeedCache {
   events: SRCEvent[];
   fetchedAt: Date;
   etag: string | null;
 }
 
-// Query params accepted by GET /events
 export interface GetEventsQuery {
   category?: SRCClassCategory;
-  from?: string;    // ISO date
-  to?: string;      // ISO date
+  from?: string;
+  to?: string;
   search?: string;
 }
 
-// Query params accepted by GET /schedule
 export interface GetScheduleQuery {
-  day?: string;   // e.g. "Monday"
-  week?: string;  // ISO date for week start, e.g. "2026-04-27"
+  day?: string;
+  week?: string;
 }
