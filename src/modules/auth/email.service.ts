@@ -23,7 +23,7 @@ export const transporter = nodemailer.createTransport({
 // Send password reset email with secure token link
 export const sendPasswordResetEmail = async (to: string, resetToken: string, firstName: string) => {
 
-  const resetUrl = `${FRONTEND_URL}/access/reset-password?token=${resetToken}`;
+  const resetUrl = `${FRONTEND_URL?.replace(/\/$/, '')}/reset-password?token=${resetToken}`;
 
   const msg: nodemailer.SendMailOptions = {
     to,
