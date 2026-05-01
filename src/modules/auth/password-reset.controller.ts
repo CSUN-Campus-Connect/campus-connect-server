@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   requestPasswordReset,
   resetPassword,
+  validateResetToken,
 } from "./password-reset.service";
 import logger from "../../utils/logger";
 
@@ -47,4 +48,13 @@ export const resetPasswordController = async (
       message: "Failed to reset password",
     });
   }
+};
+
+export const validateResetTokenController = async (req: Request, res: Response) => {
+  const { token } = req.query;
+  if (!token || typeof token !== "string") {
+    return res.status(400).json({ valid: false });
+  }
+  const valid = await validateResetToken(token);
+  return res.status(200).json({ valid });
 };

@@ -14,6 +14,7 @@ import {
 import {
   requestPasswordResetController,
   resetPasswordController,
+  validateResetTokenController,
 } from "./password-reset.controller";
 
 import {
@@ -68,6 +69,7 @@ router.patch("/me/password", authenticateToken, validate(ChangePasswordSchema), 
 // PATCH phone number
 router.patch("/me/phone", authenticateToken, userController.updatePhoneHandler);
 
+router.get("/validate-reset-token", validateResetTokenController);
 
 // PUT /api/v1/users/upsert-profile - Upsert profile
 router.put(
