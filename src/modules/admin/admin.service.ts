@@ -187,14 +187,34 @@ export const getAuditLogs = async (action: string | undefined, page: number, lim
   return { logs, total };
 };
 
-export const getAnalytics = async () => {
+// PATCH: replace getAnalytics in src/services/admin.service.ts (or wherever it lives)
+// Only this function changes — everything else in the file stays the same.
+
+export const getAnalytics = async (from?: string, to?: string) => {
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const rangeStart = from ? new Date(from) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const rangeEnd = to ? new Date(to) : now;
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const [totalUsers, newUsersMonth, newUsersWeek, totalPosts, totalClubs, totalListings, activeListings, totalEvents, usersByType] = await Promise.all([
+  const dateFilter = { createdAt: { gte: rangeStart, lte: rangeEnd } };
+
+  const [
+    totalUsers,
+    verifiedUsers,
+    nonVerifiedUsers,
+    newUsersInRange,
+    newUsersWeek,
+    totalPosts,
+    totalClubs,
+    totalListings,
+    activeListings,
+    totalEvents,
+    usersByType,
+  ] = await Promise.all([
     prisma.user.count(),
-    prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.user.count({ where: { isVerified: true } }),
+    prisma.user.count({ where: { isVerified: false } }),
+    prisma.user.count({ where: dateFilter }),
     prisma.user.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     prisma.post.count(),
     prisma.club.count(),
@@ -205,9 +225,19 @@ export const getAnalytics = async () => {
   ]);
 
   return {
-    users: { total: totalUsers, newThisMonth: newUsersMonth, newThisWeek: newUsersWeek, byType: Object.fromEntries(usersByType.map((u) => [u.userType, u._count])) },
+    users: {
+      total: totalUsers,
+      verified: verifiedUsers,
+      nonVerified: nonVerifiedUsers,
+      newInRange: newUsersInRange,
+      newThisWeek: newUsersWeek,
+      // keep newThisMonth for backwards compat with dashboard page
+      newThisMonth: newUsersInRange,
+      byType: Object.fromEntries(usersByType.map((u) => [u.userType, u._count])),
+    },
     content: { posts: totalPosts, clubs: totalClubs, events: totalEvents },
     marketplace: { totalListings, activeListings },
+    range: { from: rangeStart.toISOString(), to: rangeEnd.toISOString() },
   };
 };
 
