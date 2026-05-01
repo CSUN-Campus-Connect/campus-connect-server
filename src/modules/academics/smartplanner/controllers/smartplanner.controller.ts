@@ -10,7 +10,7 @@ import {
   searchMajors,
   suggestRoadmaps
 } from "../services/smartplanner.service";
-import type { ElectiveGroup } from "../smartplanner.types";
+import type { ElectiveGroup, PlannerElectiveChoice, PlannerElectiveOption } from "../smartplanner.types";
 import { parseMajorLevel, requireInt, requireString, validatePlannerBuildBody } from "../smartplanner.validation";
 
 /* ─────────────────────────────────────────────────────────────
@@ -94,6 +94,96 @@ function hashColor(str: string, index: number): string {
   let h = index * 73;
   for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
   return `hsl(${Math.abs(h % 360)},${68 + (Math.abs(h >> 8) % 17)}%,${48 + (Math.abs(h >> 16) % 12)}%)`;
+}
+
+function normalizeChosenCourseKey(raw: string): string {
+  return String(raw ?? "").trim().toUpperCase().replace(/\s+/g, "-");
+}
+
+function formatCourseLabel(raw: string, fallbackKey: string): string {
+  const clean = String(raw ?? "").replace(/\s+/g, " ").trim();
+  if (!clean) return fallbackKey.replace(/-/g, " ");
+  const keyPrefix = fallbackKey.replace(/-/g, " ");
+  if (clean.toUpperCase().startsWith(keyPrefix.toUpperCase())) {
+    return clean.slice(keyPrefix.length).replace(/^\s*[–\-:]?\s*/, "").trim() || keyPrefix;
+  }
+  return clean;
+}
+
+function toPlannerElectiveChoices(options: ElectiveGroup["options"], excludeKeys?: Set<string>): PlannerElectiveChoice[] {
+  const out: PlannerElectiveChoice[] = [];
+  const seen = new Set<string>();
+  for (const option of options ?? []) {
+    const courseId = normalizeChosenCourseKey(option.courseKey);
+    if (!courseId) continue;
+    if (excludeKeys?.has(courseId)) continue;
+    if (seen.has(courseId)) continue;
+    seen.add(courseId);
+    out.push({
+      courseId,
+      courseName: formatCourseLabel(option.raw, courseId),
+      courseUnits: option.units,
+    });
+  }
+  return out.sort((a, b) => a.courseId.localeCompare(b.courseId));
+}
+
+function isUpperDivisionCompElectiveKey(courseKey: string): boolean {
+  const { subject, catalog } = parseCourseKey(courseKey);
+  const n = parseInt(String(catalog).replace(/[^0-9].*$/, ""), 10);
+  return subject === "COMP" && Number.isFinite(n) && n >= 400 && n < 600;
+}
+
+function buildElectiveOptions(
+  electiveGroups: ElectiveGroup[],
+  chosenElectives: Record<string, string>,
+  alreadyScheduledKeys: Set<string> = new Set()
+): PlannerElectiveOption[] {
+  const out: PlannerElectiveOption[] = [];
+
+  for (const g of electiveGroups) {
+    const normalizedOptions = toPlannerElectiveChoices(g.options, alreadyScheduledKeys);
+    const directChoice = chosenElectives[g.id] ? normalizeChosenCourseKey(chosenElectives[g.id]) : null;
+    const slotChoices = Object.keys(chosenElectives)
+      .filter(k => k.startsWith(`${g.id}__slot`) && chosenElectives[k])
+      .map(k => normalizeChosenCourseKey(chosenElectives[k]));
+    const isUpperDiv = /upper\s+division/i.test(g.label) || /400\s*or\s*500/i.test(g.label) || /400.*500/i.test(g.label);
+
+    if (isUpperDiv) {
+      const unitsPerSlot = 3;
+      const totalUnits = g.minUnits ?? g.maxUnits ?? 3;
+      const slotCount = Math.max(1, Math.ceil(totalUnits / unitsPerSlot));
+      for (let i = 0; i < slotCount; i++) {
+        const slotId = `${g.id}__slot${i + 1}`;
+        const selected = chosenElectives[slotId] ? normalizeChosenCourseKey(chosenElectives[slotId]) : null;
+        if (selected) continue;
+        const remainingOptions = normalizedOptions.filter(opt => !slotChoices.includes(opt.courseId));
+        out.push({
+          id: slotId,
+          label: `Computer Science Upper Division Elective (${i + 1} of ${slotCount})`,
+          category: "Upper Division Elective",
+          semesterLabel: g.semesterHint || `Later Semester ${i + 1}`,
+          selected: null,
+          options: remainingOptions,
+          courseUnits: unitsPerSlot,
+        });
+      }
+      continue;
+    }
+
+    if (directChoice || slotChoices.length > 0) continue;
+
+    out.push({
+      id: g.id,
+      label: g.label,
+      category: g.source === "catalog" ? "Catalog Choice" : "Roadmap Choice",
+      semesterLabel: g.semesterHint || "Planned Semester",
+      selected: null,
+      options: normalizedOptions,
+    });
+  }
+
+  return out.filter(option => (option.options?.length ?? 0) > 0 || /upper\s+division/i.test(option.label));
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -388,6 +478,7 @@ export async function electiveGroupsFetch(req: Request, res: Response) {
       majorName, year,
       matchedRoadmap: plannerResult.matchedRoadmap,
       catalogUrl: plannerResult.catalogUrl ?? null,
+      electiveOptions: buildElectiveOptions(electiveGroups, {}, new Set(plannerResult.graph.nodes.map(n => n.key))),
       electiveGroups,
     });
   } catch (e: any) {
@@ -409,9 +500,9 @@ export async function skillTreeBuild(req: Request, res: Response) {
       body.pace === "part-time" ? "part-time" : "full-time";
     // Full-time: 12–15 units/semester (15 hard cap keeps workload sane).
     // Part-time: 6–11 units/semester.
-    const maxUnitsPerSem = pace === "full-time" ? 15 : 11;
+    const maxUnitsPerSem = pace === "full-time" ? 18 : 11;
     const minUnitsPerSem = pace === "full-time" ? 12 : 6;
-    const chosenElectives: Record<string, string> = body.chosenElectives ?? {};
+    const chosenElectives: Record<string, string> = body.chosenElectives ?? body.selectedElectives ?? {};
 
     // ── 1. Fetch ────────────────────────────────────────────────────────────
     const plannerResult = await buildPlanner(majorName, year, limit);
@@ -434,16 +525,39 @@ export async function skillTreeBuild(req: Request, res: Response) {
     }
 
     const excludeKeys = new Set<string>();
+    const selectedElectiveCourseKeys = new Set<string>();
+
     for (const g of electiveGroups) {
-      const chosen = chosenElectives[g.id];
+      const slotChoices = Object.entries(chosenElectives)
+        .filter(([id, value]) => id.startsWith(`${g.id}__slot`) && value)
+        .map(([, value]) => normalizeChosenCourseKey(value));
+      const directChoice = chosenElectives[g.id] ? normalizeChosenCourseKey(chosenElectives[g.id]) : null;
+      const chosenSet = new Set<string>([...(directChoice ? [directChoice] : []), ...slotChoices]);
+
+      for (const chosen of chosenSet) selectedElectiveCourseKeys.add(chosen);
+
       for (const opt of g.options) {
-        if (opt.courseKey !== chosen) excludeKeys.add(opt.courseKey);
+        if (!chosenSet.has(opt.courseKey)) excludeKeys.add(opt.courseKey);
       }
     }
 
-    // ── 3. Filter nodes ─────────────────────────────────────────────────────
-    const filteredNodes     = plannerResult.graph.nodes.filter(n => !excludeKeys.has(n.key));
-    const filteredNodeKeys  = new Set(filteredNodes.map(n => n.key));
+    // Filter nodes and inject selected elective nodes when the roadmap only had placeholders
+    let filteredNodes = plannerResult.graph.nodes.filter(n => !excludeKeys.has(n.key));
+    let filteredNodeKeys = new Set(filteredNodes.map(n => n.key));
+
+    const missingSelected = [...selectedElectiveCourseKeys].filter(k => !filteredNodeKeys.has(k));
+    if (missingSelected.length > 0) {
+      const injected = await buildRequirementsGraph(missingSelected);
+      for (const node of injected.nodes) {
+        if (!filteredNodeKeys.has(node.key)) {
+          filteredNodes.push(node);
+          filteredNodeKeys.add(node.key);
+        }
+      }
+      for (const edge of injected.edges) {
+        plannerResult.graph.edges.push(edge);
+      }
+    }
 
     // ── 4. Prereq map (only within filtered set) ────────────────────────────
     const prereqMap = new Map<string, string[]>();
@@ -452,6 +566,26 @@ export async function skillTreeBuild(req: Request, res: Response) {
         node.key,
         flattenPrereqs(node.prereq).filter(p => filteredNodeKeys.has(p))
       );
+    }
+
+    // CSUN-specific Computer Science sequence fixes
+    if (filteredNodeKeys.has("COMP-490") && filteredNodeKeys.has("COMP-380")) {
+      const curr = prereqMap.get("COMP-490") ?? [];
+      if (!curr.includes("COMP-380")) prereqMap.set("COMP-490", [...curr, "COMP-380"]);
+      plannerResult.graph.edges.push({ from: "COMP-380", to: "COMP-490" });
+    }
+    if (filteredNodeKeys.has("COMP-490L") && filteredNodeKeys.has("COMP-380")) {
+      const curr = prereqMap.get("COMP-490L") ?? [];
+      if (!curr.includes("COMP-380")) prereqMap.set("COMP-490L", [...curr, "COMP-380"]);
+      plannerResult.graph.edges.push({ from: "COMP-380", to: "COMP-490L" });
+    }
+    for (const key of filteredNodeKeys) {
+      if (!isUpperDivisionCompElectiveKey(key)) continue;
+      if (["COMP-482", "COMP-490", "COMP-490L", "COMP-491", "COMP-491L", "COMP-492"].includes(key)) continue;
+      if (!filteredNodeKeys.has("COMP-380")) continue;
+      const curr = prereqMap.get(key) ?? [];
+      if (!curr.includes("COMP-380")) prereqMap.set(key, [...curr, "COMP-380"]);
+      plannerResult.graph.edges.push({ from: "COMP-380", to: key });
     }
 
     // ── 4b. Dynamic sequence inference + lab-bundle detection ───────────────────
@@ -519,7 +653,7 @@ export async function skillTreeBuild(req: Request, res: Response) {
 
           // Title-based lab detection: gap=1 and upper title contains "lab"
           const upperTitle = titleOf.get(upper.key) ?? "";
-          if (gap === 1 && /lab/i.test(upperTitle)) {
+          if (gap === 1 && /\blab\b/i.test(upperTitle)) {
             // CASE A: bundle — same semester, no prereq edge
             titleLabPairs.set(upper.key, lower.key);
             continue;
@@ -622,6 +756,7 @@ export async function skillTreeBuild(req: Request, res: Response) {
       semesters,
       nodes: outputNodes,
       edges: outputEdges,
+      electiveOptions: buildElectiveOptions(electiveGroups, chosenElectives, new Set(filteredNodes.map(n => n.key))),
       electiveGroups,
       paceInfo: { pace, maxUnitsPerSem, minUnitsPerSem },
       debug: {

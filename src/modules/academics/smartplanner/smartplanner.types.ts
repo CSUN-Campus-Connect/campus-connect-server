@@ -54,6 +54,24 @@ export type PlannerBuildRequest = {
   limit?: number;
 };
 
+export type PlannerElectiveChoice = {
+  courseId: string;
+  courseName: string;
+  courseUnits?: number;
+};
+
+export type PlannerElectiveOption = {
+  id: string;
+  label: string;
+  category?: string;
+  semesterLabel: string;
+  selected: string | null;
+  courseId?: string;
+  courseName?: string;
+  courseUnits?: number;
+  options?: PlannerElectiveChoice[];
+};
+
 export type ElectiveGroup = {
   id: string;
   label: string;
@@ -80,6 +98,7 @@ export type PlannerBuildResponse = {
     edges: RequirementGraphEdge[];
   };
   courses: string[];
+  electiveOptions?: PlannerElectiveOption[];
 };
 
 export type SuggestRoadmapsResponse = {
