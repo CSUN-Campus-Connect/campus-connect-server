@@ -9,7 +9,7 @@ ENV npm_config_fund=false \
     npm_config_audit=false
 
 # BuildKit cache for faster rebuilds
-RUN --mount=type=cache,target=/root/.npm npm ci
+RUN --mount=type=cache,id=npm,target=/root/.npm npm ci
 
 # Development stage
 FROM node:20-alpine AS dev
