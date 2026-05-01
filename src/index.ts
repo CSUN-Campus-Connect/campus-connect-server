@@ -18,6 +18,7 @@ import moderationRoutes from "./modules/moderation/moderation.routes";
 import sundialRoutes from "./modules/sundial/sundial.routes";
 import securityRoutes from "./modules/security/security.routes";
 import announcementRoutes from "./modules/announcement/announcement.routes";
+import srcRoutes from "./modules/src/src.routes";
 import { setIo } from "./modules/announcement/announcement.controller";
 import { startDeliveryWorker } from "./modules/announcement/delivery.worker";
 import { sendgridWebhookHandler } from "./modules/announcement/webhooks/sendgrid.webhook";
@@ -118,6 +119,8 @@ app.use("/api/v1/security", securityRoutes);
 logger.info("Mounted security routes at /api/v1/security");
 app.use("/api/v1/announcements", announcementRoutes);
 logger.info("Mounted announcement routes at /api/v1/announcements");
+app.use("/api/v1/src", srcRoutes);
+logger.info("Mounted SRC routes at /api/v1/src");
 
 const io = setupSocket(httpServer);
 logger.info("Socket.io initialized");
