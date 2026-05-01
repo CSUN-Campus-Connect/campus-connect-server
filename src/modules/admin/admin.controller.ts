@@ -189,7 +189,9 @@ export const getAuditLog = async (req: Request, res: Response): Promise<void> =>
 
 export const getAnalyticsOverview = async (req: Request, res: Response): Promise<void> => {
   try {
-    const data = await adminService.getAnalytics();
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const data = await adminService.getAnalytics(from, to);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch analytics" });
