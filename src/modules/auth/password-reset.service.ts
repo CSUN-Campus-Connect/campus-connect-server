@@ -132,3 +132,14 @@ export const resetPassword = async (
     throw new Error("Failed to reset password");
   }
 };
+
+export const validateResetToken = async (token: string): Promise<boolean> => {
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+  const user = await prisma.user.findFirst({
+    where: {
+      passwordResetToken: hashedToken,
+      passwordResetExpiry: { gt: new Date() },
+    },
+  });
+  return !!user;
+};
