@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as sundialController from "./sundial.controller";
 import { validate } from "@/middleware/validateRequest";
-import { getSundialByDateRangeSchema } from "./sundial.validation";
+import { getAllSundialSchema, getSundialByDateRangeSchema } from "./sundial.validation";
 
 const router = Router();
 
@@ -11,6 +11,6 @@ router.get(
   sundialController.getNewsByDateRangeHandler
 );
 
-router.get("/", sundialController.getAllNewsHandler);
+router.get("/", validate(getAllSundialSchema), sundialController.getAllNewsHandler);
 
 export default router;

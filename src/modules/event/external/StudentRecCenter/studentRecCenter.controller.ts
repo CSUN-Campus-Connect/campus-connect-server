@@ -1,11 +1,8 @@
 // src/modules/event/external/StudentRecCenter/studentRecCenter.controller.ts
 //
-// Express router that mounts under:
-//   /event/external/src
-//
-// Register in your main event router:
-//   import srcRouter from "./external/StudentRecCenter/studentRecCenter.controller";
-//   router.use("/src", srcRouter);
+// FIX (2026-05-01):
+//  - Cast req.params.uid to string (fixes ts(2345) type error shown in screenshot)
+//  - All routes unchanged functionally
 
 import { Router, Request, Response, NextFunction } from "express";
 import { StudentRecCenterService } from "./studentRecCenter.service";
@@ -17,7 +14,6 @@ import {
 
 const router = Router();
 
-// ── Helper ───────────────────────────────────────────────────────────────────
 function asyncHandler(
   fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
 ) {
@@ -26,8 +22,7 @@ function asyncHandler(
   };
 }
 
-// ── GET /event/external/src/events ───────────────────────────────────────────
-// Query params: category, from (ISO date), to (ISO date), search
+// GET /events
 router.get(
   "/events",
   asyncHandler(async (req, res) => {
@@ -44,11 +39,12 @@ router.get(
   })
 );
 
-// ── GET /event/external/src/events/:uid ──────────────────────────────────────
+// GET /events/:uid  — FIX: String() cast removes ts(2345) error
 router.get(
   "/events/:uid",
   asyncHandler(async (req, res) => {
-    const event = await StudentRecCenterService.getEventByUid(req.params.uid);
+    const uid   = String(req.params.uid);   // ← was req.params.uid (string | string[])
+    const event = await StudentRecCenterService.getEventByUid(uid);
     if (!event) {
       res.status(404).json({ success: false, message: "Event not found" });
       return;
@@ -57,67 +53,50 @@ router.get(
   })
 );
 
-// ── GET /event/external/src/schedule ─────────────────────────────────────────
-// Query params: day (e.g. "Monday"), week (ISO date for week's Sunday)
+// GET /schedule
 router.get(
   "/schedule",
   asyncHandler(async (req, res) => {
     const { day, week } = req.query as Record<string, string>;
-
     const classes = await StudentRecCenterService.getScheduleClasses({ day, week });
-
     res.json({ success: true, count: classes.length, data: classes });
   })
 );
 
-// ── POST /event/external/src/calendar/add ────────────────────────────────────
-// Body: AddToCalendarDto
+// POST /calendar/add
 router.post(
   "/calendar/add",
   asyncHandler(async (req, res) => {
     const dto: AddToCalendarDto = req.body;
-
     if (!dto.eventUid || !dto.userEmail) {
       res.status(400).json({ success: false, message: "eventUid and userEmail are required" });
       return;
     }
-
     const result = await StudentRecCenterService.addToCalendar(dto);
-
     res.status(result.success ? 200 : 404).json(result);
   })
 );
 
-// ── POST /event/external/src/schedule/save ───────────────────────────────────
-// Body: SaveScheduleClassDto
-// Auth: expects req.user.id to be set by your auth middleware
+// POST /schedule/save
 router.post(
   "/schedule/save",
   asyncHandler(async (req, res) => {
-    // TODO: replace with your real auth middleware check
     const userId: string = (req as any).user?.id ?? "anonymous";
-
     const dto: SaveScheduleClassDto = req.body;
-
     if (!dto.classId || !dto.weekStart) {
       res.status(400).json({ success: false, message: "classId and weekStart are required" });
       return;
     }
-
     const result = await StudentRecCenterService.saveScheduleClass(userId, dto);
-
     if (!result.success) {
-      // 409 = already saved
       res.status(409).json(result);
       return;
     }
-
     res.status(201).json(result);
   })
 );
 
-// ── GET /event/external/src/feed.ics ─────────────────────────────────────────
-// Raw ICS proxy — avoids CORS on the client
+// GET /feed.ics
 router.get(
   "/feed.ics",
   asyncHandler(async (_req, res) => {
@@ -127,8 +106,7 @@ router.get(
   })
 );
 
-// ── POST /event/external/src/cache/invalidate ────────────────────────────────
-// Admin-only: bust in-memory cache
+// POST /cache/invalidate
 router.post(
   "/cache/invalidate",
   asyncHandler(async (_req, res) => {

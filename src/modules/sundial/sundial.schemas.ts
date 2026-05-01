@@ -39,6 +39,14 @@ export const sundialArticleSchema = z.object({
   }),
 });
 
+export const sundialLimitQuerySchema = z.object({
+  limit: z.number().int().min(1).max(100).optional().meta({
+    id: "Limit",
+    description: "Maximum number of newest articles to return",
+    example: 25,
+  }),
+});
+
 export const getSundialByDateRangeSuccessSchema = z.object({
   total: z.number().meta({
     id: "Total",
