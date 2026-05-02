@@ -14,4 +14,9 @@ export interface SundialDateRangeQuery {
   rangeStart: Date;
   rangeEnd: Date;
   category?: SundialNewsCategory;
+  limit?: number;
+}
+
+export interface GetAllSundialQuery {
+  limit?: number;
 }

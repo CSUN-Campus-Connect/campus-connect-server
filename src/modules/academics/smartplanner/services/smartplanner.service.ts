@@ -354,6 +354,11 @@ function parseCourseToken(rawText: string) {
 
   const subject = m[1].toUpperCase();
   const catalog = m[2].toUpperCase();
+
+  if (["UNIT", "UNITS", "TOTAL"].includes(subject)) {
+    return { raw };
+  }
+
   const courseKey = `${subject}-${catalog}`;
   return { raw, subject, catalog, courseKey };
 }
@@ -402,7 +407,9 @@ export async function parseRoadmap(url: string): Promise<ParsedRoadmap> {
     }
     if (!currentLabel) continue;
 
-    const matches = Array.from(line.matchAll(courseRe)).map(m => `${m[1]} ${m[2]}`);
+    const matches = Array.from(line.matchAll(courseRe))
+      .filter(m => !["UNIT", "UNITS", "TOTAL"].includes(String(m[1] ?? "").toUpperCase()))
+      .map(m => `${m[1]} ${m[2]}`);
     for (const c of matches) currentCourses.push(c);
   }
 
@@ -413,9 +420,9 @@ export async function parseRoadmap(url: string): Promise<ParsedRoadmap> {
   if (semesters.length === 0) {
     const allCourses = Array.from(
       new Set(
-        Array.from(text.matchAll(/\b([A-Z]{2,6})\s+([0-9]{2,4}[A-Z]{0,3})\b/g)).map(
-          m => `${m[1]} ${m[2]}`
-        )
+        Array.from(text.matchAll(/\b([A-Z]{2,6})\s+([0-9]{2,4}[A-Z]{0,3})\b/g))
+          .filter(m => !["UNIT", "UNITS", "TOTAL"].includes(String(m[1] ?? "").toUpperCase()))
+          .map(m => `${m[1]} ${m[2]}`)
       )
     );
     if (allCourses.length > 0) {

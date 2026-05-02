@@ -3,8 +3,14 @@ import * as sundialService from "./sundial.service";
 import { SundialNewsCategory } from "@prisma/client";
 import logger from "@/utils/logger";
 
+const parseLimit = (raw: unknown) => {
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
+};
+
 /**
- * GET /api/v1/sundial/queryByDateRange?rangeStart=...&rangeEnd=...&category=...
+ * GET /api/v1/sundial/queryByDateRange?rangeStart=...&rangeEnd=...&category=...&limit=...
  * Query sundial news articles by date range, with optional category filter.
  */
 export const getNewsByDateRangeHandler = async (
@@ -65,8 +71,10 @@ export const getNewsByDateRangeHandler = async (
       rangeStart,
       rangeEnd,
       category: category as SundialNewsCategory | undefined,
+      limit: parseLimit(req.query.limit),
     });
 
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.status(200).json(result);
   } catch (error) {
     logger.error(error, "sundial.get_by_date_range.failed");
@@ -75,16 +83,19 @@ export const getNewsByDateRangeHandler = async (
 };
 
 /**
- * GET /api/v1/sundial
- * Retrieve all sundial news articles.
+ * GET /api/v1/sundial?limit=...
+ * Retrieve the latest sundial news articles.
  */
 export const getAllNewsHandler = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const result = await sundialService.getAllNews();
+    const result = await sundialService.getAllNews({
+      limit: parseLimit(req.query.limit),
+    });
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.status(200).json(result);
   } catch (error) {
     logger.error(error, "sundial.get_all.failed");
