@@ -17,7 +17,8 @@ class S3Service {
   async uploadFile(
     file: Buffer,
     fileName: string,
-    folder: 'marketplace' | 'social-feed' | 'events' | 'profiles'
+    folder: 'marketplace' | 'social-feed' | 'events' | 'profiles' | 'messages',
+    mimeType: string
   ): Promise<string> {
     const key = `${folder}/${Date.now()}-${fileName}`;
     
@@ -25,7 +26,7 @@ class S3Service {
       Bucket: process.env.AWS_S3_BUCKET!,
       Key: key,
       Body: file,
-      ContentType: file.toString().includes('PNG') ? 'image/png' : 'image/jpeg',
+      ContentType: mimeType,
     });
 
     await this.s3Client.send(command);
