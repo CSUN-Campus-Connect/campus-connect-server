@@ -16,7 +16,8 @@ export const uploadController = {
       const imageUrl = await s3Service.uploadFile(
         req.file.buffer,
         req.file.originalname,
-        folder
+        folder,
+        req.file.mimetype
       );
 
       res.json({ imageUrl });

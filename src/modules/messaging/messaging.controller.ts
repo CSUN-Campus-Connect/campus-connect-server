@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as messagingService from "./messaging.service";
 import { CreateConversationData, EditMessageData } from "./messaging.types";
+import { uploadMessageAttachment } from "./messaging.upload.service";
 
 // Conversations
 
@@ -199,6 +200,13 @@ export const sendMessageHandler = async (
       return;
     }
 
+    // Block check
+    const blocked = await messagingService.isBlockedBy(req.user.id, req.params.id as string);
+    if (blocked) {
+      res.status(403).json({ message: "You cannot send messages to this conversation" });
+      return;
+    }
+
     const message = await messagingService.sendMessage({
       conversationId: req.params.id as string,
       senderId: req.user.id,
@@ -211,6 +219,8 @@ export const sendMessageHandler = async (
     next(error);
   }
 };
+
+
 
 export const editMessageHandler = async (
   req: Request,
@@ -448,6 +458,41 @@ export const removeReactionHandler = async (
     }
 
     res.status(200).json({ message: "Reaction removed" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const uploadAttachmentHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user?.id) {
+      res.status(401).json({ message: "Authentication required" });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ message: "No file provided" });
+      return;
+    }
+
+    const isParticipant = await messagingService.isParticipant(req.params.id as string, req.user.id);
+    if (!isParticipant) {
+      res.status(403).json({ message: "Not a participant in this conversation" });
+      return;
+    }
+
+    const result = await uploadMessageAttachment(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      req.params.id as string
+    );
+
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
