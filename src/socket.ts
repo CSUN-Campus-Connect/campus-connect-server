@@ -73,6 +73,13 @@ export const setupSocket = (httpServer: HttpServer): Server => {
         const isParticipant = await messagingService.isParticipant(data.conversationId, userId);
         if (!isParticipant) return;
 
+        // Block check — if recipient has blocked sender, silently drop
+        const blocked = await messagingService.isBlockedBy(userId, data.conversationId);
+        if (blocked) {
+          socket.emit("message:blocked", { conversationId: data.conversationId });
+          return;
+        }
+
         const hasContent = data.content && data.content.trim().length > 0;
         const hasAttachments = data.attachments && data.attachments.length > 0;
         if (!hasContent && !hasAttachments) return;
@@ -199,6 +206,7 @@ export const setupSocket = (httpServer: HttpServer): Server => {
         logger.error({ userId, error }, "Failed to mark as read");
       }
     });
+    
 
     // Handle joining new conversation rooms
     socket.on("conversation:join", (data: { conversationId: string }) => {

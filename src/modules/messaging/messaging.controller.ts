@@ -200,6 +200,13 @@ export const sendMessageHandler = async (
       return;
     }
 
+    // Block check
+    const blocked = await messagingService.isBlockedBy(req.user.id, req.params.id as string);
+    if (blocked) {
+      res.status(403).json({ message: "You cannot send messages to this conversation" });
+      return;
+    }
+
     const message = await messagingService.sendMessage({
       conversationId: req.params.id as string,
       senderId: req.user.id,
@@ -212,6 +219,8 @@ export const sendMessageHandler = async (
     next(error);
   }
 };
+
+
 
 export const editMessageHandler = async (
   req: Request,

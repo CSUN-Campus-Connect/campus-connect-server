@@ -10,6 +10,27 @@ import {
   PublicMessage,
 } from "./messaging.types";
 
+export const isBlockedBy = async (senderId: string, conversationId: string): Promise<boolean> => {
+  // Get other participants in the conversation
+  const participants = await prisma.conversationParticipant.findMany({
+    where: { conversationId, userId: { not: senderId } },
+    select: { userId: true },
+  });
+
+  const otherIds = participants.map((p) => p.userId);
+  if (otherIds.length === 0) return false;
+
+  // Check if any of them have blocked the sender
+  const block = await prisma.blockedUser.findFirst({
+    where: {
+      blockerId: { in: otherIds },
+      blockedId: senderId,
+    },
+  });
+
+  return !!block;
+};
+
 const userSelect = {
   id: true,
   firstName: true,
@@ -464,6 +485,8 @@ export const markAsRead = async (
     },
   });
 };
+
+
 
 // User presence
 
