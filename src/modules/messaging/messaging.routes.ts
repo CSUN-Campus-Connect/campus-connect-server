@@ -16,7 +16,9 @@ import {
   addReactionSchema,
   removeReactionSchema,
 } from "./messaging.validation";
+import multer from "multer";
 
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const router = Router();
 
 // Conversations
@@ -61,6 +63,13 @@ router.get(
   authenticateToken,
   validate(getMessagesSchema),
   messagingController.getMessagesHandler
+);
+
+router.post(
+  "/conversations/:id/attachments",
+  authenticateToken,
+  upload.single("file"),
+  messagingController.uploadAttachmentHandler
 );
 
 router.post(
