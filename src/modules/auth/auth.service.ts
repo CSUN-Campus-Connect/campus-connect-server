@@ -27,6 +27,8 @@ export const toPublicUser = (user: any): PublicUser => ({
   city: user.city,
   websites: user.websites,
   createdAt: user.createdAt,
+  phoneNumber: user.phoneNumber ?? null,
+  emergencyAlertsOptIn: user.emergencyAlertsOptIn ?? true,
 });
 
 // Helper: Generates verification token for email verification
@@ -213,10 +215,15 @@ export const loginUser = async (email: string, password: string) => {
 // Refresh access token
 export const refreshAccessToken = async (user: JWTPayload) => {
   try {
-    const newAccessToken = jwt.sign(user, authConfig.jwt_secret as string, {
+    const payload: JWTPayload = {
+      id: user.id,
+      email: user.email,
+      userType: user.userType,
+      ...(user.sessionId ? { sessionId: user.sessionId } : {}),
+    };
+    const newAccessToken = jwt.sign(payload, authConfig.jwt_secret as string, {
       expiresIn: authConfig.jwt_expires_in as any,
     });
-
     return newAccessToken;
   } catch (error) {
     throw new Error("Invalid token", { cause: error });
@@ -432,6 +439,28 @@ export const revokeOtherSessions = async (
 ): Promise<void> => {
   await prisma.userSession.deleteMany({
     where: { userId, id: { not: currentSessionId } },
+  });
+};
+
+// Revokes a single session by ID only if it belongs to the requesting user
+export const revokeSessionById = async (
+  userId: string,
+  sessionId: string,
+): Promise<boolean> => {
+  const result = await prisma.userSession.deleteMany({
+    where: { id: sessionId, userId },
+  });
+  return result.count > 0;
+};
+
+export const updatePhone = async (
+  userId: string,
+  phoneNumber: string | null,
+  emergencyAlertsOptIn: boolean,
+): Promise<void> => {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { phoneNumber, emergencyAlertsOptIn },
   });
 };
 

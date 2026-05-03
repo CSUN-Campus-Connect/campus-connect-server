@@ -5,7 +5,7 @@ import { User } from "@prisma/client";
 declare global {
   namespace Express {
     interface Request {
-      user?: Omit<User, "passwordHashed">;
+      user?: Omit<User, "passwordHashed"> & { sessionId?: string };
     }
   }
 }

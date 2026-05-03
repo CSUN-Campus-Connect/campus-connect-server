@@ -102,7 +102,10 @@ router.get("/sessions", authenticateToken, userController.getSessionsHandler);
 // GET /api/v1/users/login-history - Get login history for the authenticated user
 router.get("/login-history", authenticateToken, userController.getLoginHistoryHandler);
 
-// POST /api/v1/users/sessions/revoke - Revoke a specific session by session ID
+// DELETE /api/v1/users/sessions/:sessionId - End a specific session (e.g. from the active sessions screen)
+router.delete("/sessions/:sessionId", authenticateToken, userController.revokeSessionByIdHandler);
+
+// POST /api/v1/users/sessions/revoke-all - Revoke all other sessions except the current one
 router.post("/sessions/revoke-all", authenticateToken, userController.revokeOtherSessionsHandler);
 
 // Generic routes (must come LAST after specific routes)
