@@ -237,14 +237,14 @@ export const upsertUserProfile = async (
   }
 
   const profileData = {
-    firstName: userData.first,
-    lastName: userData.last,
-    email: userData.email,
-    profilePicture: userData.profilePicture,
-    bio: userData.bio,
-    city: userData.city,
-    websites: userData.websites,
+    ...(userData.firstName && { firstName: userData.firstName }),
+    ...(userData.lastName && { lastName: userData.lastName }),
+    ...(userData.profilePicture !== undefined && { profilePicture: userData.profilePicture }),
+    ...(userData.bio !== undefined && { bio: userData.bio }),
+    ...(userData.city !== undefined && { city: userData.city }),
+    ...(userData.websites !== undefined && { websites: userData.websites }),
   };
+
 
   const updatedProfile = await prisma.user.update({
     where: { id: userId },
@@ -458,5 +458,16 @@ export const clearExpoPushToken = async (userId: string): Promise<void> => {
       expoPushToken: null,
       expoPushTokenUpdatedAt: new Date(),
     },
+  });
+};
+
+export const updatePhone = async (
+  userId: string,
+  phoneNumber: string | null,
+  emergencyAlertsOptIn: boolean,
+): Promise<void> => {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { phoneNumber, emergencyAlertsOptIn },
   });
 };
