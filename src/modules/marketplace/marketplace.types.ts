@@ -12,7 +12,7 @@
  * - Frontend/backend data contracts
  */
 
-import { MarketplaceCategory, ItemCondition, ListingStatus } from "@prisma/client";
+import { MarketplaceCategory, ItemCondition, ListingStatus, ListingType } from "@prisma/client";
 
 /**
  * CreateListingData
@@ -22,12 +22,16 @@ import { MarketplaceCategory, ItemCondition, ListingStatus } from "@prisma/clien
 export interface CreateListingData {
   title: string;                    // Item title (required)
   description: string;               // Detailed description (required)
-  price: number;                     // Current selling price (required)
+  price: number | null;              // Current selling price (required for sale)
   originalPrice?: number;            // Original price for showing savings (optional)
   images: string[];                  // Array of image URLs (required, can be empty)
   condition: ItemCondition;          // Item condition enum (required)
   category: MarketplaceCategory;     // Category enum (required)
   location: string;                  // Campus location (required)
+  listingType: ListingType;
+  meetupLocation?: string | null;
+  rentalPrice?: number | null;
+  rentalDurationDays?: number | null;
   sellerId: string;                  // User ID of seller (required)
 }
 
@@ -40,12 +44,16 @@ export interface CreateListingData {
 export interface UpdateListingData {
   title?: string;
   description?: string;
-  price?: number;
+  price?: number | null;
   originalPrice?: number;
   images?: string[];
   condition?: ItemCondition;
   category?: MarketplaceCategory;
   location?: string;
+  listingType?: ListingType;
+  meetupLocation?: string | null;
+  rentalPrice?: number | null;
+  rentalDurationDays?: number | null;
   status?: ListingStatus;            // Allows marking as sold/inactive
 }
 
@@ -59,12 +67,16 @@ export interface PublicListing {
   id: string;
   title: string;
   description: string;
-  price: number;
+  price: number | null;
   originalPrice: number | null;
   images: string[];
   condition: ItemCondition;
   category: MarketplaceCategory;
   location: string;
+  listingType: ListingType;
+  meetupLocation: string | null;
+  rentalPrice: number | null;
+  rentalDurationDays: number | null;
   views: number;
   status: ListingStatus;
   createdAt: Date;
@@ -92,6 +104,7 @@ export interface PublicListing {
 export interface ListingFilters {
   category?: MarketplaceCategory;    // Filter by category
   condition?: ItemCondition;         // Filter by condition
+  listingType?: ListingType;
   minPrice?: number;                 // Minimum price
   maxPrice?: number;                 // Maximum price
   search?: string;                   // Search in title/description

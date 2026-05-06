@@ -3,7 +3,7 @@ CREATE TYPE "SundialNewsCategory" AS ENUM ('news', 'sports', 'culture', 'multime
 
 -- CreateTable
 CREATE TABLE "SundialNews" (
-    "id" TEXT NOT NULL,
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
     "category" "SundialNewsCategory" NOT NULL,
     "title" TEXT NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,

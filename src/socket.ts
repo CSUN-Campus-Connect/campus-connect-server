@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import authConfig from "./modules/auth/auth.config";
 import { JWTPayload } from "./middleware/auth.middleware";
 import * as messagingService from "./modules/messaging/messaging.service";
+import { setupAnnouncementSocket } from "./modules/announcement/announcement.socket";
 import logger from "./utils/logger";
 
 interface AuthenticatedSocket extends Socket {
@@ -13,7 +14,9 @@ interface AuthenticatedSocket extends Socket {
 export const setupSocket = (httpServer: HttpServer): Server => {
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || "http://localhost:3000",
+      origin: process.env.CLIENT_URL
+        ? process.env.CLIENT_URL.split(",").map((o) => o.trim())
+        : "http://localhost:3000",
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -46,6 +49,13 @@ export const setupSocket = (httpServer: HttpServer): Server => {
       logger.error({ userId, error }, "Failed to update lastActiveAt on connect");
     }
 
+    // Wire announcement events (banner sync, dismiss, initial state push)
+    try {
+      await setupAnnouncementSocket(io, socket);
+    } catch (error) {
+      logger.error({ userId, error }, "Failed to setup announcement socket");
+    }
+
     // Join user to all their conversation rooms
     try {
       const conversations = await messagingService.getUserConversations(userId);
@@ -62,6 +72,13 @@ export const setupSocket = (httpServer: HttpServer): Server => {
       try {
         const isParticipant = await messagingService.isParticipant(data.conversationId, userId);
         if (!isParticipant) return;
+
+        // Block check — if recipient has blocked sender, silently drop
+        const blocked = await messagingService.isBlockedBy(userId, data.conversationId);
+        if (blocked) {
+          socket.emit("message:blocked", { conversationId: data.conversationId });
+          return;
+        }
 
         const hasContent = data.content && data.content.trim().length > 0;
         const hasAttachments = data.attachments && data.attachments.length > 0;
@@ -189,6 +206,7 @@ export const setupSocket = (httpServer: HttpServer): Server => {
         logger.error({ userId, error }, "Failed to mark as read");
       }
     });
+    
 
     // Handle joining new conversation rooms
     socket.on("conversation:join", (data: { conversationId: string }) => {

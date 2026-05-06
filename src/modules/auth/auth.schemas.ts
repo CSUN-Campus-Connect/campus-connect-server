@@ -100,6 +100,7 @@ export const RegisterSchema = z.object({
         description: "Last name must be at least 2 characters long",
         example: "Doe",
       }),
+      
   }),
 });
 

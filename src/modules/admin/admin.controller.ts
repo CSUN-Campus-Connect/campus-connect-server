@@ -189,7 +189,9 @@ export const getAuditLog = async (req: Request, res: Response): Promise<void> =>
 
 export const getAnalyticsOverview = async (req: Request, res: Response): Promise<void> => {
   try {
-    const data = await adminService.getAnalytics();
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const data = await adminService.getAnalytics(from, to);
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch analytics" });
@@ -416,33 +418,6 @@ export const upsertSystemConfig = async (req: Request, res: Response): Promise<v
     res.json(config);
   } catch (error) {
     res.status(500).json({ error: "Failed to update config" });
-  }
-};
-
-export const getAnnouncements = async (req: Request, res: Response): Promise<void> => {
-  try { res.json(await adminService.getAllAnnouncements()); } catch (error) { res.status(500).json({ error: "Failed to fetch announcements" }); }
-};
-
-export const createAnnouncement = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { title, body } = req.body;
-    if (!title || !body) { res.status(400).json({ error: "title and body required" }); return; }
-    const announcement = await adminService.createNewAnnouncement(req.body, req.user!.id);
-    await logAdminAction(req, "announcement:created", `announcement:${announcement.id}`, { title });
-    res.status(201).json(announcement);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create announcement" });
-  }
-};
-
-export const deleteAnnouncement = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const id = req.params.id as string;
-    await adminService.deleteAnnouncementById(id);
-    await logAdminAction(req, "announcement:deleted", `announcement:${id}`);
-    res.json({ message: "Announcement deleted" });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete announcement" });
   }
 };
 
