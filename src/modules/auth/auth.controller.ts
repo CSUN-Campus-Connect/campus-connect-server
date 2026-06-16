@@ -50,7 +50,7 @@ export const loginUserHandler = async (
   try {
     const { email, password } = req.body;
     const { refreshToken, user } = await userService.loginUser(email, password);
-    const deviceLabel = parseUserAgent(req.headers["user-agent"] || "");
+    const deviceLabel = parseUserAgent(req.headers["user-agent"] as string || "");
     const rawIp = req.ip || null;
     const cleanIp = rawIp?.replace("::ffff:", "") ?? null;
     const location = cleanIp ? await getLocationFromIp(cleanIp) : null;
@@ -123,12 +123,27 @@ export const refreshAccessTokenHandler = async (
   _next: NextFunction,
 ) => {
   try {
-    const user = (req as any).user;
+    const user = req.user;
     if (!user) {
       return res.status(403).json({ message: "Unauthorized: User missing" });
     }
 
-    const newAccessToken = await userService.refreshAccessToken(user);
+    // Re-decode the refresh token to recover the sessionId (if any) so the
+    // new access token stays bound to the same session.
+    const refreshToken = req.headers.authorization?.split(" ")[1];
+    const decoded = refreshToken
+      ? (jwt.decode(refreshToken) as { sessionId?: string } | null)
+      : null;
+    const sessionId = decoded?.sessionId;
+
+    const payload = {
+      id: user.id,
+      email: user.email,
+      userType: user.userType,
+      ...(sessionId ? { sessionId } : {}),
+    };
+
+    const newAccessToken = await userService.refreshAccessToken(payload);
 
     if (!newAccessToken) {
       return res.status(403).json({ message: "Invalid new access token" });
@@ -397,7 +412,7 @@ export const logoutHandler = async (
       return res.status(400).json({ message: "Session ID is required" });
     }
 
-    const token = req.headers["authorization"]?.split(" ")[1];
+    const token = req.headers.authorization?.split(" ")[1];
     if (!token) {
       return res.status(401).json({ message: "No token provided" });
     }
@@ -430,6 +445,44 @@ export const getLoginHistoryHandler = async (req: Request, res: Response, next: 
     const userId = (req as any).user?.id;
     const history = await userService.getLoginHistory(userId);
     return res.status(200).json({ history });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Revokes a single specific session by ID used by the "End session" button per device
+export const revokeSessionByIdHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = req.user?.id;
+    const sessionId = req.params.sessionId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (typeof sessionId !== "string") {
+      return res.status(400).json({ message: "Invalid session ID" });
+    }
+
+    const currentSessionId = req.user?.sessionId;
+
+    if (currentSessionId && sessionId === currentSessionId) {
+      return res.status(400).json({
+        message: "Use /logout to end your current session",
+      });
+    }
+
+    const deleted = await userService.revokeSessionById(userId, sessionId);
+
+    if (!deleted) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    return res.status(200).json({ message: "Session ended" });
   } catch (error) {
     next(error);
   }

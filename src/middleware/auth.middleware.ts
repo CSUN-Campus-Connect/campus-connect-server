@@ -80,19 +80,19 @@ export const authenticateToken = async (
       }
     }
 
-    (req as any).user = { ...user, sessionId: decoded.sessionId }; // ← change this line
+    (req as any).user = { ...user, sessionId: decoded.sessionId }; 
     next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      res.status(401).json({
-        error: "Authentication failed",
-        message: "Invalid token",
-      });
-      return;
-    } else if (error instanceof jwt.TokenExpiredError) {
+    if (error instanceof jwt.TokenExpiredError) {
       res.status(401).json({
         error: "Authentication failed",
         message: "Token expired",
+      });
+      return;
+    } else if (error instanceof jwt.JsonWebTokenError) {
+      res.status(401).json({
+        error: "Authentication failed",
+        message: "Invalid token",
       });
       return;
     } else {
